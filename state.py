@@ -16,15 +16,13 @@ class Day:
     number: int
     day_of_week: str
 
-
-class ResidentRank(Enum):
-    """Enum to represent the rank of a resident"""
-
-    r1 = 1
-    r2 = 2
-    r3 = 3
-    r4 = 4
-    ext = 5
+    def __post_init__(self):
+        if self.number < 1 or self.number > 31:
+            raise ValueError("Day number must be between 1 and 31")
+        if self.day_of_week not in ["L", "M", "X", "J", "V", "S", "D"]:
+            raise ValueError(
+                "Day of the week must be one of 'L', 'M', 'X', 'J', 'V', 'S', 'D'"
+            )
 
 
 @dataclass(frozen=True)
@@ -37,7 +35,11 @@ class Resident:
     """
 
     name: str
-    rank: ResidentRank
+    rank: str
+
+    def __post_init__(self):
+        if self.rank not in ["R1", "R2", "R3", "R4", "Ext"]:
+            raise ValueError("Rank must be one of 'R1', 'R2', 'R3', 'R4', 'Ext'")
 
 
 class ShiftType(Enum):
