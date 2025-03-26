@@ -1,16 +1,17 @@
 """Module to handle input and output of excel files"""
 
+import numpy as np
 import pandas as pd
 
 import state
 
 
-def extract_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
-    """Extracts resident names & ranks from columns A & B.
+def load_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
+    """loads resident names & ranks from columns A & B.
 
     args:
         file_path: The path to the Excel file
-        sheet_name: The name of the sheet to extract data from
+        sheet_name: The name of the sheet to load data from
 
     returns:
         A list of Resident objects
@@ -32,12 +33,12 @@ def extract_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
     return residents
 
 
-def extract_days(file_path: str, sheet_name: str) -> list[state.Day]:
-    """Extracts day numbers and weekdays from rows 2 & 3.
+def load_days(file_path: str, sheet_name: str) -> list[state.Day]:
+    """loads day numbers and weekdays from rows 2 & 3.
 
     args:
         file_path: The path to the Excel file
-        sheet_name: The name of the sheet to extract data from
+        sheet_name: The name of the sheet to load data from
 
     returns:
         A list of Day objects
@@ -58,11 +59,11 @@ def extract_days(file_path: str, sheet_name: str) -> list[state.Day]:
 
 
 def load_restrictions(file_path: str, sheet_name: str) -> list[tuple[int, int]]:
-    """Extracts restrictions from the Excel file.
+    """loads restrictions from the Excel file.
 
     args:
         file_path: The path to the Excel file
-        sheet_name: The name of the sheet to extract data from
+        sheet_name: The name of the sheet to load data from
 
     returns:
         A list of restricted (resident_index, day_index) tuples with the restrictions
@@ -118,10 +119,41 @@ def is_rowcol_in_bounds(idx: int, bounds: tuple[int, int]) -> bool:
     return bounds[0] <= idx <= bounds[1]
 
 
+def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
+    """loads totals from the Excel file.
+
+    args:
+        file_path: The path to the Excel file
+        sheet_name: The name of the sheet to load data from
+
+    returns:
+        A matrix of total shifts of each type for each resident, rows are residents, columns are shift types
+    """
+
+    df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
+
+    ROW_BOUNDS = (2, 20)
+    COL_BOUNDS = (1, 4)
+
+    totals = []
+    for row_idx, row in df.iterrows():
+        if is_rowcol_in_bounds(row_idx, ROW_BOUNDS):
+            shifts = []
+            for col_idx, cell in enumerate(row):
+                if is_rowcol_in_bounds(col_idx, COL_BOUNDS):
+                    shifts.append(cell)
+
+            totals.append(shifts)
+
+    return totals
+
+
 if __name__ == "__main__":
-    residents = extract_residents("data/Guardias enero.xlsx", "Enero 2025")
-    days = extract_days("data/Guardias enero.xlsx", "Enero 2025")
+    residents = load_residents("data/Guardias enero.xlsx", "Enero 2025")
+    days = load_days("data/Guardias enero.xlsx", "Enero 2025")
     v_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025")
+    totals = load_totals("data/Guardias enero.xlsx", "Global")
     print(len(residents), residents)
     print(len(days), days)
     print(v_positions)
+    print(totals)
