@@ -1,6 +1,5 @@
 """Module to handle input and output of excel files"""
 
-import numpy as np
 import pandas as pd
 
 import state
@@ -146,6 +145,9 @@ def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
             totals.append(shifts)
 
     return totals
+
+
+# TODO: Add function to load totals of Sabados and Viernes-Domingos
 
 
 if __name__ == "__main__":
