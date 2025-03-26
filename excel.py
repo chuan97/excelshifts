@@ -23,7 +23,7 @@ def extract_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
     residents = []
     lastrank = None
     for i, row in df.iterrows():
-        if is_rowcol_within_bounds(i, ROW_BOUNDS):
+        if is_rowcol_in_bounds(i, ROW_BOUNDS):
             if pd.notna(row[0]):
                 lastrank = row[0]
 
@@ -80,17 +80,16 @@ def load_restrictions(file_path: str, sheet_name: str) -> list[tuple[int, int]]:
         (row_idx - ROW_OFFSET, col_idx - COL_OFFSET)
         for row_idx, row in df.iterrows()
         for col_idx, cell in enumerate(row)
-        if is_cell_within_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS)
-        and cell == "V"
+        if is_cell_in_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS) and cell == "V"
     ]
 
     return v_positions
 
 
-def is_cell_within_bounds(
+def is_cell_in_bounds(
     row_idx: int, col_idx: int, row_bounds: tuple[int, int], col_bounds: tuple[int, int]
 ) -> bool:
-    """Check if a cell is within the bounds of the table
+    """Check if a cell is in the bounds of the table
 
     args:
         row_idx: The row index of the cell
@@ -99,22 +98,22 @@ def is_cell_within_bounds(
         col_bounds: The bounds of the columns
 
     returns:
-        True if the cell is within the bounds, False otherwise
+        True if the cell is in the bounds, False otherwise
     """
-    return is_rowcol_within_bounds(row_idx, row_bounds) and is_rowcol_within_bounds(
+    return is_rowcol_in_bounds(row_idx, row_bounds) and is_rowcol_in_bounds(
         col_idx, col_bounds
     )
 
 
-def is_rowcol_within_bounds(idx: int, bounds: tuple[int, int]) -> bool:
-    """Check if a row or column is within the bounds of the table
+def is_rowcol_in_bounds(idx: int, bounds: tuple[int, int]) -> bool:
+    """Check if a row or column is in the bounds of the table
 
     args:
         idx: The row or column index
         bounds: The bounds of the row or column
 
     returns:
-        True if the row or column is within the bounds, False otherwise
+        True if the row or column is in the bounds, False otherwise
     """
     return bounds[0] <= idx <= bounds[1]
 
