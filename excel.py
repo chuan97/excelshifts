@@ -149,6 +149,7 @@ def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
 
 # TODO: Add function to load totals of Sabados and Viernes-Domingos
 # TODO: Add function to load emergency shifts and afternoon emergency shifts, CREATE ONE FUNCTION TO EXTRACT COORDINATES OF DATES MARKED WITH A GIVEN STRING
+# TODO: Eliminate rotante externo
 
 
 if __name__ == "__main__":
