@@ -18,7 +18,7 @@ def load_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
-    ROW_BOUNDS = (3, 24)
+    ROW_BOUNDS = (3, 23)
 
     residents = []
     lastrank = None
@@ -73,7 +73,7 @@ def load_restrictions(file_path: str, sheet_name: str) -> list[tuple[int, int]]:
     ROW_OFFSET = 3
     COL_OFFSET = 2
 
-    ROW_BOUNDS = (ROW_OFFSET, 24)
+    ROW_BOUNDS = (ROW_OFFSET, 23)
     COL_BOUNDS = (COL_OFFSET, 35)
 
     v_positions = [
