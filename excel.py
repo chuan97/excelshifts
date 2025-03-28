@@ -21,7 +21,6 @@ def load_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
     ROW_BOUNDS = (3, 23)
 
     residents = []
-    lastrank = None
     for i, row in df.iterrows():
         if is_rowcol_in_bounds(i, ROW_BOUNDS):
             if pd.notna(row[0]):
@@ -57,12 +56,15 @@ def load_days(file_path: str, sheet_name: str) -> list[state.Day]:
     return days
 
 
-def load_restrictions(file_path: str, sheet_name: str) -> list[tuple[int, int]]:
+def load_restrictions(
+    file_path: str, sheet_name: str, type_: str
+) -> list[tuple[int, int]]:
     """loads restrictions from the Excel file.
 
     args:
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to load data from
+        type_: The type of restriction
 
     returns:
         A list of restricted (resident_index, day_index) tuples with the restrictions
@@ -76,14 +78,14 @@ def load_restrictions(file_path: str, sheet_name: str) -> list[tuple[int, int]]:
     ROW_BOUNDS = (ROW_OFFSET, 23)
     COL_BOUNDS = (COL_OFFSET, 35)
 
-    v_positions = [
+    positions = [
         (row_idx - ROW_OFFSET, col_idx - COL_OFFSET)
         for row_idx, row in df.iterrows()
         for col_idx, cell in enumerate(row)
-        if is_cell_in_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS) and cell == "V"
+        if is_cell_in_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS) and cell == type_
     ]
 
-    return v_positions
+    return positions
 
 
 def is_cell_in_bounds(
@@ -149,15 +151,18 @@ def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
 
 # TODO: Add function to load totals of Sabados and Viernes-Domingos
 # TODO: Add function to load emergency shifts and afternoon emergency shifts, CREATE ONE FUNCTION TO EXTRACT COORDINATES OF DATES MARKED WITH A GIVEN STRING
-# TODO: Eliminate rotante externo
 
 
 if __name__ == "__main__":
     residents = load_residents("data/Guardias enero.xlsx", "Enero 2025")
     days = load_days("data/Guardias enero.xlsx", "Enero 2025")
-    v_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025")
+    v_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "V")
+    u_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "U")
+    ut_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "UT")
     totals = load_totals("data/Guardias enero.xlsx", "Global")
     print(len(residents), residents)
     print(len(days), days)
     print(v_positions)
+    print(u_positions)
+    print(ut_positions)
     print(totals)
