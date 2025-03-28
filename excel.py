@@ -211,6 +211,7 @@ def save_shifts(file_path: str, sheet_name: str, shift_matrix: list[list[str]]):
 
 
 # TODO: Add function to load totals of Sabados and Viernes-Domingos
+# TODO: Add function to save updated totals
 
 
 if __name__ == "__main__":
