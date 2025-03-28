@@ -1,6 +1,10 @@
 """Module to handle input and output of excel files"""
 
+import os
+import shutil
+
 import pandas as pd
+from openpyxl import load_workbook
 
 import state
 
@@ -133,7 +137,7 @@ def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
-    ROW_BOUNDS = (2, 20)
+    ROW_BOUNDS = (2, 22)
     COL_BOUNDS = (1, 4)
 
     totals = []
@@ -147,6 +151,63 @@ def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
             totals.append(shifts)
 
     return totals
+
+
+import os
+import shutil
+
+
+def copy_excel_file(original_path: str, new_filename: str):
+    """Copies an Excel file and saves it with a new filename in the same directory.
+
+    args:
+        original_path: The path to the original Excel file
+        new_filename: The new filename for the copied file
+
+    returns:
+        The path of the copied file
+    """
+    # Get the directory of the original file
+    dir_name = os.path.dirname(original_path)
+
+    # Define the new file path
+    new_path = os.path.join(dir_name, new_filename)
+
+    # Copy the file
+    shutil.copy2(original_path, new_path)
+
+    return new_path  # Return the path of the copied file
+
+
+def save_shifts(file_path: str, sheet_name: str, shift_matrix: list[list[str]]):
+    """Introduces the shifts into a given Excel file
+
+    args:
+        file_path: The path to the Excel file
+        sheet_name: The name of the sheet to save data to
+        shift_matrix: The matrix of shifts to save
+    """
+
+    # Load the existing workbook
+    wb = load_workbook(file_path)
+
+    # Select the sheet
+    if sheet_name not in wb.sheetnames:
+        raise ValueError(f"Sheet '{sheet_name}' not found in the workbook.")
+
+    sheet = wb[sheet_name]
+
+    ROW_OFFSET = 3
+    COL_OFFSET = 2
+
+    for i, row in enumerate(shift_matrix):
+        for j, shift in enumerate(row):
+            if shift:
+                sheet.cell(
+                    row=i + ROW_OFFSET + 1, column=j + COL_OFFSET + 1, value=shift
+                )
+
+        wb.save(file_path)
 
 
 # TODO: Add function to load totals of Sabados and Viernes-Domingos
