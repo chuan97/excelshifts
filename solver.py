@@ -1,7 +1,11 @@
 """Module to implement the contraint programming routine"""
 
+import math
+
+import numpy as np
 from ortools.sat.python import cp_model
 
+import excel
 import state
 
 
@@ -12,7 +16,7 @@ def solve_shifts(
     u_positions: list[tuple[int, int]],
     ut_positions: list[tuple[int, int]],
     totals: list[list[int]],
-) -> list[tuple[int, int]]:
+) -> list[list[str]]:
     """Asign shifts to residents and days
 
     Args:
@@ -27,9 +31,9 @@ def solve_shifts(
     """
 
     # from u_positions, compute the number of emergency shifts for each resident
-    emergencies = [0] * len(residents)
+    emergencies = [0.0] * len(residents)
     for i, j in u_positions:
-        emergencies[i] += 1
+        emergencies[i] += 1.0
 
     # from ut_positions, compute the number of afternoon emergency shifts for each resident
     for i, j in ut_positions:
@@ -38,9 +42,8 @@ def solve_shifts(
     model = cp_model.CpModel()
 
     # Create the variables
-    shifts = (
-        {}
-    )  # shifts[(i, j, k)] = 1 if resident i is assigned to day j with shift type k
+    # shifts[(i, j, k)] = 1 if resident i is assigned to day j with shift type k
+    shifts = {}
     for i, _ in enumerate(residents):
         for j, _ in enumerate(days):
             for k, _ in enumerate(state.ShiftType):
@@ -60,12 +63,12 @@ def solve_shifts(
             )
 
     # R1s and R2s work at least one weekend shift
-    for i, _ in enumerate(residents):
+    for i, resident in enumerate(residents):
         if resident.rank not in ["R3", "R4"]:
             model.add_at_least_one(
                 shifts[(i, j, k)]
-                for j, _ in enumerate(days)
-                if days[j].day_of_week in ["S", "D"]
+                for j, day in enumerate(days)
+                if day.day_of_week in ["S", "D"]
                 for k, _ in enumerate(state.ShiftType)
             )
 
@@ -74,27 +77,27 @@ def solve_shifts(
         if resident.rank in ["R3", "R4"]:
             model.add_exactly_one(
                 shifts[(i, j, k)]
-                for j, _ in enumerate(days)
-                if days[j].day_of_week in ["S", "D"]
+                for j, day in enumerate(days)
+                if day.day_of_week in ["S", "D"]
                 for k, _ in enumerate(state.ShiftType)
             )
 
     # If a resident does a friday shift in anything but R, they must do the following sunday shift
     for i, resident in enumerate(residents):
-        for j, _ in enumerate(days):
-            if days[j].day_of_week == "V":
+        for j, day in enumerate(days):
+            if day.day_of_week == "V":
                 for k, typeA in enumerate(state.ShiftType):
-                    if typeA != state.ShiftType.R and shifts[(i, j, k)]:
+                    if typeA != state.ShiftType.R:
                         model.add_exactly_one(
                             shifts[(i, j + 2, p)]
                             for p, typeB in enumerate(state.ShiftType)
                             if typeA != typeB
-                        )
+                        ).only_enforce_if(shifts[(i, j, k)])
 
     # Actually no R type shifts on the weekend (MAY NEED TO BE RELAXED)
     for i, _ in enumerate(residents):
-        for j, _ in enumerate(days):
-            if days[j].day_of_week in ["V", "S", "D"]:
+        for j, day in enumerate(days):
+            if day.day_of_week in ["V", "S", "D"]:
                 for k, type in enumerate(state.ShiftType):
                     if type == state.ShiftType.R:
                         model.add(shifts[(i, j, k)] == 0)
@@ -104,18 +107,20 @@ def solve_shifts(
         for j, _ in enumerate(days):
             if j < len(days) - 1:
                 for k, _ in enumerate(state.ShiftType):
-                    if shifts[(i, j, k)]:
-                        for p, _ in enumerate(state.ShiftType):
-                            model.add(shifts[(i, j + 1, p)] == 0)
+                    for p, _ in enumerate(state.ShiftType):
+                        model.add(shifts[(i, j + 1, p)] == 0).only_enforce_if(
+                            shifts[(i, j, k)]
+                        )
 
     # If a resident does a shift on a saturday, they cannot do a shift the following monday
     for i, _ in enumerate(residents):
-        for j, _ in enumerate(days):
-            if days[j].day_of_week == "S":
+        for j, day in enumerate(days):
+            if day.day_of_week == "S" and j < len(days) - 2:
                 for k, _ in enumerate(state.ShiftType):
-                    if shifts[(i, j, k)]:
-                        for p, _ in enumerate(state.ShiftType):
-                            model.add(shifts[(i, j + 2, p)] == 0)
+                    for p, _ in enumerate(state.ShiftType):
+                        model.add(shifts[(i, j + 2, p)] == 0).only_enforce_if(
+                            shifts[(i, j, k)]
+                        )
 
     # Every resident does at least one shift of each type
     for i, _ in enumerate(residents):
@@ -152,22 +157,20 @@ def solve_shifts(
     for i, resident in enumerate(residents):
         if resident.rank in ["R1", "R2"]:
             model.add(
-                sum(
+                math.floor(5.5 - emergencies[i])
+                < sum(
                     shifts[(i, j, k)]
                     for j, _ in enumerate(days)
                     for k, _ in enumerate(state.ShiftType)
                 )
-                + emergencies[i]
-                >= 5.5
             )
             model.add(
-                sum(
+                math.floor(6 - emergencies[i])
+                >= sum(
                     shifts[(i, j, k)]
                     for j, _ in enumerate(days)
                     for k, _ in enumerate(state.ShiftType)
                 )
-                + emergencies[i]
-                <= 6
             )
 
     # If a resident is restricted a given day, they cannot do a shift that day
@@ -185,4 +188,58 @@ def solve_shifts(
         for k, _ in enumerate(state.ShiftType):
             model.add(shifts[(i, j, k)] == 0)
 
-    # TODO: Add the cost function
+    # Objetcive function: minimize the difference between different shift totals for each resident
+    # TODO: month_totals has to be a list of lists or a dict
+    month_totals = np.empty((len(residents), len(state.ShiftType)))
+    for i, resident in enumerate(residents):
+        for k, _ in enumerate(state.ShiftType):
+            month_totals[i, k] = sum(shifts[(i, j, k)] for j, _ in enumerate(days))
+
+    new_totals = month_totals + np.array(totals)
+
+    for i, resident in enumerate(residents):
+        model.minimize(np.var(new_totals[i]))
+
+    # Solve the model
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
+
+    if status == cp_model.OPTIMAL:
+        shifts_matrix = []
+        for i, resident in enumerate(residents):
+            shifts_per_resident = []
+            for j, day in enumerate(days):
+                shift = ""
+                for k, type in enumerate(state.ShiftType):
+                    if solver.Value(shifts[(i, j, k)]):
+                        shift = type.name
+                        break
+                shifts_per_resident.append(shift)
+
+        shifts_matrix.append(shifts_per_resident)
+
+        return shifts_matrix
+    else:
+        print("No solution found")
+        return None
+
+
+if __name__ == "__main__":
+    residents = excel.load_residents("data/Guardias enero.xlsx", "Enero 2025")
+    days = excel.load_days("data/Guardias enero.xlsx", "Enero 2025")
+    v_positions = excel.load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "V")
+    u_positions = excel.load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "U")
+    ut_positions = excel.load_restrictions(
+        "data/Guardias enero.xlsx", "Enero 2025", "UT"
+    )
+    totals = excel.load_totals("data/Guardias enero.xlsx", "Global")
+    print(len(residents), residents)
+    print(len(days), days)
+    print(len(v_positions), v_positions)
+    print(len(u_positions), u_positions)
+    print(len(ut_positions), ut_positions)
+    print(len(totals), totals)
+    shifts_matrix = solve_shifts(
+        residents, days, v_positions, u_positions, ut_positions, totals
+    )
+    print(shifts_matrix)
