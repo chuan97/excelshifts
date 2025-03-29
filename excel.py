@@ -1,6 +1,5 @@
 """Module to handle input and output of excel files"""
 
-import os
 import shutil
 
 import pandas as pd
@@ -157,21 +156,18 @@ import os
 import shutil
 
 
-def copy_excel_file(original_path: str, new_filename: str):
+def copy_excel_file(original_path: str, fname_extension: str):
     """Copies an Excel file and saves it with a new filename in the same directory.
 
     args:
         original_path: The path to the original Excel file
-        new_filename: The new filename for the copied file
+        fname_extension: A string to add to the original filename
 
     returns:
         The path of the copied file
     """
-    # Get the directory of the original file
-    dir_name = os.path.dirname(original_path)
-
     # Define the new file path
-    new_path = os.path.join(dir_name, new_filename)
+    new_path = original_path[:-5] + fname_extension + ".xlsx"
 
     # Copy the file
     shutil.copy2(original_path, new_path)

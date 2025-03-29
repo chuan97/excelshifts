@@ -51,6 +51,29 @@ def solve_shifts(
     for i, j in ut_positions:
         emergencies[i] += 0.5
 
+    # from v_positions which is sorted by resident and day within resident, compute the number of five-day vacation streaks for each resident
+    last_i = v_positions[0][0]
+    last_j = -1
+    count = 1
+    excused_shifts = {}
+    for i, j in v_positions:
+        print(i, j, count)
+        if i != last_i:
+            excuses = count // 5
+            if excuses:
+                excused_shifts[i - 1] = excuses
+            last_i = i
+            count = 1
+
+        if j == last_j + 1:
+            count += 1
+
+        last_j = j
+
+    print(v_positions)
+    print(excused_shifts)
+    print()
+
     model = cp_model.CpModel()
 
     # Create the variables
@@ -61,7 +84,7 @@ def solve_shifts(
             for k, _ in enumerate(state.ShiftType):
                 shifts[(i, j, k)] = model.NewBoolVar(f"shift_{i}_{j}_{k}")
 
-    # # Create the constraints
+    # Create the constraints
     # # Every shift type_ is covered by one resident every day except for R on the weekend
     # for k, _ in enumerate(state.ShiftType):
     #     for j, day in enumerate(days):
@@ -189,9 +212,10 @@ def solve_shifts(
     #             if type_ in [state.ShiftType.G, state.ShiftType.M]:
     #                 model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
 
-    # R3s and R4s do exactly six shifts
+    # R3s and R4s do exactly six shifts unless they have excuses due to restrictions
     for i, resident in enumerate(residents):
         if resident.rank in ["R3", "R4"]:
+            excuse = excused_shifts.get(i, 0)
             model.add(
                 sum(
                     shifts[(i, j, k)]
@@ -199,14 +223,16 @@ def solve_shifts(
                     if j < end_of_month
                     for k, _ in enumerate(state.ShiftType)
                 )
-                == 6
+                == 6 - excuse
             )
 
     # R1s and R2s do between 5.5 and 6 shifts after counting their emergencies shifts
+    # and the excuses due to restrictions
     for i, resident in enumerate(residents):
         if resident.rank in ["R1", "R2"]:
+            excuse = excused_shifts.get(i, 0)
             model.add(
-                math.floor(5 - emergencies[i])
+                math.floor(5 - emergencies[i]) - excuse
                 < sum(
                     shifts[(i, j, k)]
                     for j, _ in enumerate(days)
@@ -215,7 +241,7 @@ def solve_shifts(
                 )
             )
             model.add(
-                math.floor(6 - emergencies[i])
+                math.floor(6 - emergencies[i]) - excuse
                 >= sum(
                     shifts[(i, j, k)]
                     for j, _ in enumerate(days)
@@ -268,7 +294,6 @@ def solve_shifts(
 
     # Objective function: minimize the difference between the total number of shifts of each type for each resident
     # Establish the two shift types with the least total number as preferences for each resident
-
     preferences = []
     for i, _ in enumerate(residents):
         sorted_totals = np.argsort(totals[i])
@@ -303,27 +328,19 @@ def solve_shifts(
 
 
 if __name__ == "__main__":
-    residents = excel.load_residents("data/Guardias enero.xlsx", "Enero 2025")
-    days = excel.load_days("data/Guardias enero.xlsx", "Enero 2025")
-    v_positions = excel.load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "V")
-    u_positions = excel.load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "U")
-    ut_positions = excel.load_restrictions(
-        "data/Guardias enero.xlsx", "Enero 2025", "UT"
-    )
-    totals = excel.load_totals("data/Guardias enero.xlsx", "Global")
-    print(len(residents), residents)
-    print(len(days), days)
-    print(len(v_positions), v_positions)
-    print(len(u_positions), u_positions)
-    print(len(ut_positions), ut_positions)
-    print(len(totals), totals)
+    f_path = "data/Guardias enero.xlsx"
+    sheet_name = "Enero 2025"
+
+    residents = excel.load_residents(f_path, sheet_name)
+    days = excel.load_days(f_path, sheet_name)
+    v_positions = excel.load_restrictions(f_path, sheet_name, "V")
+    u_positions = excel.load_restrictions(f_path, sheet_name, "U")
+    ut_positions = excel.load_restrictions(f_path, sheet_name, "UT")
+    totals = excel.load_totals(f_path, "Global")
+
     shifts_matrix = solve_shifts(
         residents, days, v_positions, u_positions, ut_positions, totals
     )
     print(shifts_matrix)
-    excel.copy_excel_file(
-        "data/Guardias enero simple.xlsx", "Guardias enero simple_solved.xlsx"
-    )
-    excel.save_shifts(
-        "data/Guardias enero simple_solved.xlsx", "Enero 2025", shifts_matrix
-    )
+    f_path_out = excel.copy_excel_file(f_path, "_solved")
+    excel.save_shifts(f_path_out, sheet_name, shifts_matrix)
