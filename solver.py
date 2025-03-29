@@ -9,7 +9,6 @@ from ortools.sat.python import cp_model
 import excel
 import state
 
-# TODO: cada 5/7 dias de vacaciones se hace una guardia menos
 # TODO: los R4s se ponen sus propias guardias y en general puede haber gente que se haya fijado guardias
 # TODO: maximimar cobertura de tipos de guardia en función coste
 
@@ -29,50 +28,16 @@ def solve_shifts(
         days: The list of days
         v_positions: The list of restricted (resident, day) tuples
         u_positions: The list of restricted (resident, day) tuples due to having emergencies shifts
+        ut_positions: The list of restricted (residen, day) tuples due to having afternoon emergencies shifts
         totals : The list of current totals for each resident and shift type_
 
     Returns:
         A matrix of shifts for each resident and day, rows are residents and columns are days
     """
 
-    # detect end of month
-    end_of_month = len(days)
-    for i in range(1, len(days)):
-        if days[i].number < days[i - 1].number:
-            end_of_month = i
-            break
-
-    # from u_positions, compute the number of emergency shifts for each resident
-    emergencies = [0.0] * len(residents)
-    for i, j in u_positions:
-        emergencies[i] += 1.0
-
-    # from ut_positions, compute the number of afternoon emergency shifts for each resident
-    for i, j in ut_positions:
-        emergencies[i] += 0.5
-
-    # from v_positions which is sorted by resident and day within resident, compute the number of five-day vacation streaks for each resident
-    last_i = v_positions[0][0]
-    last_j = -1
-    count = 1
-    excused_shifts = {}
-    for i, j in v_positions:
-        print(i, j, count)
-        if i != last_i:
-            excuses = count // 5
-            if excuses:
-                excused_shifts[i - 1] = excuses
-            last_i = i
-            count = 1
-
-        if j == last_j + 1:
-            count += 1
-
-        last_j = j
-
-    print(v_positions)
-    print(excused_shifts)
-    print()
+    end_of_month = detect_end_of_month(days)
+    emergencies = compute_emergency_shifts(u_positions, ut_positions, residents)
+    excused_shifts = compute_excused_shifts(v_positions)
 
     model = cp_model.CpModel()
 
@@ -325,6 +290,84 @@ def solve_shifts(
     else:
         print("No solution found")
         return None
+
+
+def detect_end_of_month(days: list[state.Day]) -> int:
+    """Detect the last day of the month if days beyond that point are considered
+
+    Args:
+        days: The list of days
+
+    Returns:
+        The index of the last day of the month in the list of days
+    """
+
+    end_of_month = len(days)
+    for i in range(1, len(days)):
+        if days[i].number < days[i - 1].number:
+            end_of_month = i
+            break
+
+    return end_of_month
+
+
+def compute_emergency_shifts(
+    u_positions: list[tuple[int, int]],
+    ut_positions: list[tuple[int, int]],
+    residents: list[state.Resident],
+) -> list[int]:
+    """Compute number of emergency shifts done by each resident
+
+    Args:
+        u_positions: The list of restricted (resident, day) tuples due to having emergencies shifts
+        ut_positions: The list of restricted (residen, day) tuples due to having afternoon emergencies shifts
+        residents: The list of residents
+
+    Returns:
+        A list with the number of emergencies for each resident
+    """
+
+    # from u_positions, compute the number of emergency shifts for each resident
+    emergencies = [0.0] * len(residents)
+    for i, _ in u_positions:
+        emergencies[i] += 1.0
+
+    # from ut_positions, compute the number of afternoon emergency shifts for each resident
+    for i, _ in ut_positions:
+        emergencies[i] += 0.5
+
+    return emergencies
+
+
+def compute_excused_shifts(v_positions: list[tuple[int, int]]) -> dict[int, int]:
+    """Compute the number of five-day vacation streaks for each resident
+
+    Args:
+        v_positions (list[tuple[int, int]]): The list of restricted (resident, day) tuples
+
+    Returns:
+        A dictionary with the (resident, excuses) pairs
+    """
+
+    # from v_positions which is sorted by resident and day within resident, compute the number of five-day vacation streaks for each resident
+    last_i = v_positions[0][0]
+    last_j = -1
+    count = 1
+    excused_shifts = {}
+    for i, j in v_positions:
+        if i != last_i:
+            excuses = count // 5
+            if excuses:
+                excused_shifts[i - 1] = excuses
+            last_i = i
+            count = 1
+
+        if j == last_j + 1:
+            count += 1
+
+        last_j = j
+
+    return excused_shifts
 
 
 if __name__ == "__main__":
