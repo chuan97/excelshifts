@@ -163,19 +163,19 @@ def solve_shifts(
                 <= 2
             )
 
-    # # R1s and R2s do at most one shift of type_s R and T
-    # for i, resident in enumerate(residents):
-    #     if resident.rank in ["R1", "R2"]:
-    #         for k, type_ in enumerate(state.ShiftType):
-    #             if type_ in [state.ShiftType.R, state.ShiftType.T]:
-    #                 model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
+    # R1s and R2s do at most one shift of type_s R and T
+    for i, resident in enumerate(residents):
+        if resident.rank in ["R1", "R2"]:
+            for k, type_ in enumerate(state.ShiftType):
+                if type_ in [state.ShiftType.R, state.ShiftType.T]:
+                    model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
 
-    # # R3s and R4s do at most one shift of type_ G and M
-    # for i, resident in enumerate(residents):
-    #     if resident.rank in ["R3", "R4"]:
-    #         for k, type_ in enumerate(state.ShiftType):
-    #             if type_ in [state.ShiftType.G, state.ShiftType.M]:
-    #                 model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
+    # R3s and R4s do at most one shift of type_ G and M
+    for i, resident in enumerate(residents):
+        if resident.rank in ["R3", "R4"]:
+            for k, type_ in enumerate(state.ShiftType):
+                if type_ in [state.ShiftType.G, state.ShiftType.M]:
+                    model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
 
     # R3s and R4s do exactly six shifts unless they have excuses due to restrictions
     for i, resident in enumerate(residents):

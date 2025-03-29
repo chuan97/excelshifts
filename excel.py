@@ -152,10 +152,6 @@ def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
     return totals
 
 
-import os
-import shutil
-
-
 def copy_excel_file(original_path: str, fname_extension: str):
     """Copies an Excel file and saves it with a new filename in the same directory.
 
