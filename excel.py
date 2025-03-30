@@ -91,6 +91,36 @@ def load_restrictions(
     return positions
 
 
+def load_preset_shifts(file_path: str, sheet_name: str) -> list[tuple[int, int, int]]:
+    """loads preset shifts from the Excel file.
+
+    args:
+        file_path: The path to the Excel file
+        sheet_name: The name of the sheet to load data from
+
+    returns:
+        A list of (resident_index, day_index, shift_index) tuples with the preset shifts
+    """
+
+    df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
+
+    ROW_OFFSET = 3
+    COL_OFFSET = 2
+
+    ROW_BOUNDS = (ROW_OFFSET, 23)
+    COL_BOUNDS = (COL_OFFSET, 35)
+
+    positions = [
+        (row_idx - ROW_OFFSET, col_idx - COL_OFFSET, state.ShiftType[cell].value - 1)
+        for row_idx, row in df.iterrows()
+        for col_idx, cell in enumerate(row)
+        if is_cell_in_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS)
+        and cell in list(state.ShiftType.__members__)
+    ]
+
+    return positions
+
+
 def is_cell_in_bounds(
     row_idx: int, col_idx: int, row_bounds: tuple[int, int], col_bounds: tuple[int, int]
 ) -> bool:
@@ -213,9 +243,12 @@ if __name__ == "__main__":
     u_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "U")
     ut_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "UT")
     totals = load_totals("data/Guardias enero.xlsx", "Global")
+    presets = load_preset_shifts("data/Guardias enero presets.xlsx", "Enero 2025")
     print(len(residents), residents)
     print(len(days), days)
     print(v_positions)
     print(u_positions)
     print(ut_positions)
     print(totals)
+    print()
+    print(presets)

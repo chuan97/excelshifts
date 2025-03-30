@@ -19,6 +19,7 @@ def solve_shifts(
     v_positions: list[tuple[int, int]],
     u_positions: list[tuple[int, int]],
     ut_positions: list[tuple[int, int]],
+    presets: list[tuple[int, int, int]],
     totals: list[list[int]],
 ) -> list[list[str]]:
     """Asign shifts to residents and days
@@ -28,7 +29,8 @@ def solve_shifts(
         days: The list of days
         v_positions: The list of restricted (resident, day) tuples
         u_positions: The list of restricted (resident, day) tuples due to having emergencies shifts
-        ut_positions: The list of restricted (residen, day) tuples due to having afternoon emergencies shifts
+        ut_positions: The list of restricted (resident, day) tuples due to having afternoon emergencies shifts
+        presets: The list of preset shifts as (resident, day, shift) tuples
         totals : The list of current totals for each resident and shift type_
 
     Returns:
@@ -72,7 +74,7 @@ def solve_shifts(
 
     # R1s and R2s work at least one weekend shift
     for i, resident in enumerate(residents):
-        if resident.rank not in ["R3", "R4"]:
+        if resident.rank in ["R1", "R2"]:
             model.add_at_least_one(
                 shifts[(i, j, k)]
                 for j, day in enumerate(days)
@@ -112,7 +114,7 @@ def solve_shifts(
                         shifts[(i, j, k)]
                     )
 
-    # Actually no R type_ shifts on the weekend (MAY NEED TO BE RELAXED)
+    # Actually no R type_ shifts on the weekend
     for i, _ in enumerate(residents):
         for j, day in enumerate(days):
             if day.day_of_week in ["S", "D"]:
@@ -257,6 +259,10 @@ def solve_shifts(
             if j > 0:
                 model.add(shifts[(i, j - 1, k)] == 0)
 
+    # If there are preset shifts, enforce those
+    for preset in presets:
+        model.add(shifts[preset] == 1)
+
     # Objective function: minimize the difference between the total number of shifts of each type for each resident
     # Establish the two shift types with the least total number as preferences for each resident
     preferences = []
@@ -287,9 +293,9 @@ def solve_shifts(
             shifts_matrix.append(shifts_per_resident)
 
         return shifts_matrix
-    else:
-        print("No solution found")
-        return None
+
+    print("No solution found")
+    return None
 
 
 def detect_end_of_month(days: list[state.Day]) -> int:
@@ -371,7 +377,7 @@ def compute_excused_shifts(v_positions: list[tuple[int, int]]) -> dict[int, int]
 
 
 if __name__ == "__main__":
-    f_path = "data/Guardias enero.xlsx"
+    f_path = "data/Guardias enero presets.xlsx"
     sheet_name = "Enero 2025"
 
     residents = excel.load_residents(f_path, sheet_name)
@@ -380,9 +386,10 @@ if __name__ == "__main__":
     u_positions = excel.load_restrictions(f_path, sheet_name, "U")
     ut_positions = excel.load_restrictions(f_path, sheet_name, "UT")
     totals = excel.load_totals(f_path, "Global")
+    preset_shifts = excel.load_preset_shifts(f_path, sheet_name)
 
     shifts_matrix = solve_shifts(
-        residents, days, v_positions, u_positions, ut_positions, totals
+        residents, days, v_positions, u_positions, ut_positions, preset_shifts, totals
     )
     print(shifts_matrix)
     f_path_out = excel.copy_excel_file(f_path, "_solved")
