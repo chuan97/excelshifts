@@ -9,7 +9,7 @@ from ortools.sat.python import cp_model
 import excel
 import state
 
-# TODO: los R4s se ponen sus propias guardias y en general puede haber gente que se haya fijado guardias
+# TODO: no hay rea en festivos, gestionar festivos
 # TODO: maximimar cobertura de tipos de guardia en función coste
 
 
