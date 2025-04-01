@@ -43,7 +43,8 @@ def solve_shifts(
 
     model = cp_model.CpModel()
 
-    # Create the variables
+    # ------ CREATE THE VARIABLES ------
+
     # shifts[(i, j, k)] = 1 if resident i is assigned to day j with shift type_ k
     shifts = {}
     for i, _ in enumerate(residents):
@@ -51,7 +52,8 @@ def solve_shifts(
             for k, _ in enumerate(state.ShiftType):
                 shifts[(i, j, k)] = model.NewBoolVar(f"shift_{i}_{j}_{k}")
 
-    # Create the constraints
+    # ------ CREATE THE CONSTRAINTS ------
+
     # # Every shift type_ is covered by one resident every day except for R on the weekend
     # for k, _ in enumerate(state.ShiftType):
     #     for j, day in enumerate(days):
@@ -296,7 +298,9 @@ def solve_shifts(
     for preset in presets:
         model.add(shifts[preset] == 1)
 
-    # Objective function: minimize the difference between the total number of shifts of each type for each resident
+    # ------ OBJECTIVE FUNCTION ------
+
+    # Minimize the difference between the total number of shifts of each type for each resident
     # Establish the two shift types with the least total number as preferences for each resident
     preferences = []
     for i, _ in enumerate(residents):
@@ -307,7 +311,8 @@ def solve_shifts(
         for k in preferences[i]:
             model.maximize(sum(shifts[(i, j, k)] for j, _ in enumerate(days)))
 
-    # Solve the model
+    # ------ SOLVE THE MODEL ------
+
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
 
@@ -328,7 +333,7 @@ def solve_shifts(
         return shifts_matrix
 
     print("No solution found")
-    return None
+    return status
 
 
 def detect_end_of_month(days: list[state.Day]) -> int:
