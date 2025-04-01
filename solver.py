@@ -54,6 +54,8 @@ def solve_shifts(
 
     # ------ CREATE THE CONSTRAINTS ------
 
+    # --- discarded constraints ---
+
     # # Every shift type_ is covered by one resident every day except for R on the weekend
     # for k, _ in enumerate(state.ShiftType):
     #     for j, day in enumerate(days):
@@ -61,6 +63,18 @@ def solve_shifts(
     #             model.add_exactly_one(
     #                 shifts[(i, j, k)] for i, _ in enumerate(residents)
     #             )
+
+    # # each resident other than R4s does at most one shift on thursday to promote equidistribution
+    # for i, resident in enumerate(residents):
+    #     if resident != "R4":
+    #         model.add_at_most_one(
+    #             shifts[(i, j, k)]
+    #             for j, day in enumerate(days)
+    #             if day.day_of_week == "J" and j < end_of_month
+    #             for k, _ in enumerate(state.ShiftType)
+    #         )
+
+    # --- unconditional constraints ---
 
     # Every shift type is covered by at most one resident each day
     for j, _ in enumerate(days):
@@ -73,6 +87,49 @@ def solve_shifts(
             model.add_at_most_one(
                 shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType)
             )
+
+    # If a resident is restricted a given day, they cannot do a shift that day
+    for i, j in v_positions:
+        for k, _ in enumerate(state.ShiftType):
+            model.add(shifts[(i, j, k)] == 0)
+
+    # No R type_ shifts on the weekend
+    for i, _ in enumerate(residents):
+        for j, day in enumerate(days):
+            if day.day_of_week in ["S", "D"]:
+                for k, type_ in enumerate(state.ShiftType):
+                    if type_ == state.ShiftType.R:
+                        model.add(shifts[(i, j, k)] == 0)
+
+    # If a resident does a shift on a day, they cannot do a shift on the following day
+    for i, _ in enumerate(residents):
+        for j, _ in enumerate(days):
+            if j < len(days) - 1:
+                for k, _ in enumerate(state.ShiftType):
+                    for p, _ in enumerate(state.ShiftType):
+                        model.add(shifts[(i, j + 1, p)] == 0).only_enforce_if(
+                            shifts[(i, j, k)]
+                        )
+
+    # If a resident has an emergency shift, they cannot do a shift that day or the next
+    for i, j in u_positions:
+        for k, _ in enumerate(state.ShiftType):
+            model.add(shifts[(i, j, k)] == 0)
+            if j < len(days) - 1:
+                model.add(shifts[(i, j + 1, k)] == 0)
+
+    # If a resident has an afternoon emergency shift, they cannot do a shift that day or the day before
+    for i, j in ut_positions:
+        for k, _ in enumerate(state.ShiftType):
+            model.add(shifts[(i, j, k)] == 0)
+            if j > 0:
+                model.add(shifts[(i, j - 1, k)] == 0)
+
+    # If there are preset shifts, enforce those
+    for preset in presets:
+        model.add(shifts[preset] == 1)
+
+    # --- conditional constraints ---
 
     # R1s and R2s work at least one weekend shift
     for i, resident in enumerate(residents):
@@ -115,24 +172,6 @@ def solve_shifts(
                     model.add(shifts[(i, j + 2, k)] == 0).only_enforce_if(
                         shifts[(i, j, k)]
                     )
-
-    # Actually no R type_ shifts on the weekend
-    for i, _ in enumerate(residents):
-        for j, day in enumerate(days):
-            if day.day_of_week in ["S", "D"]:
-                for k, type_ in enumerate(state.ShiftType):
-                    if type_ == state.ShiftType.R:
-                        model.add(shifts[(i, j, k)] == 0)
-
-    # If a resident does a shift on a day, they cannot do a shift on the following day
-    for i, _ in enumerate(residents):
-        for j, _ in enumerate(days):
-            if j < len(days) - 1:
-                for k, _ in enumerate(state.ShiftType):
-                    for p, _ in enumerate(state.ShiftType):
-                        model.add(shifts[(i, j + 1, p)] == 0).only_enforce_if(
-                            shifts[(i, j, k)]
-                        )
 
     # If a resident that is not R4 does a shift on a saturday, they cannot do a shift the following monday
     for i, resident in enumerate(residents):
@@ -250,16 +289,6 @@ def solve_shifts(
                     <= 6 - math.floor(emergencies[i]) - excuses
                 )
 
-    # # each resident other than R4s does at most one shift on thursday to promote equidistribution
-    # for i, resident in enumerate(residents):
-    #     if resident != "R4":
-    #         model.add_at_most_one(
-    #             shifts[(i, j, k)]
-    #             for j, day in enumerate(days)
-    #             if day.day_of_week == "J" and j < end_of_month
-    #             for k, _ in enumerate(state.ShiftType)
-    #         )
-
     # no resident other than R4s can have more than 2 shifts in 6 days (triplete)
     n = 6
     m = 2
@@ -274,29 +303,6 @@ def solve_shifts(
                     )
                     <= m
                 )
-
-    # If a resident is restricted a given day, they cannot do a shift that day
-    for i, j in v_positions:
-        for k, _ in enumerate(state.ShiftType):
-            model.add(shifts[(i, j, k)] == 0)
-
-    # If a resident has an emergency shift, they cannot do a shift that day or the next
-    for i, j in u_positions:
-        for k, _ in enumerate(state.ShiftType):
-            model.add(shifts[(i, j, k)] == 0)
-            if j < len(days) - 1:
-                model.add(shifts[(i, j + 1, k)] == 0)
-
-    # If a resident has an afternoon emergency shift, they cannot do a shift that day or the day before
-    for i, j in ut_positions:
-        for k, _ in enumerate(state.ShiftType):
-            model.add(shifts[(i, j, k)] == 0)
-            if j > 0:
-                model.add(shifts[(i, j - 1, k)] == 0)
-
-    # If there are preset shifts, enforce those
-    for preset in presets:
-        model.add(shifts[preset] == 1)
 
     # ------ OBJECTIVE FUNCTION ------
 
@@ -333,7 +339,8 @@ def solve_shifts(
         return shifts_matrix
 
     print("No solution found")
-    return status
+    print(status)
+    return None
 
 
 def detect_end_of_month(days: list[state.Day]) -> int:
