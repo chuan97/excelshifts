@@ -74,7 +74,7 @@ def solve_shifts(
     #             for k, _ in enumerate(state.ShiftType)
     #         )
 
-    # --- unconditional constraints ---
+    # --- basic constraints ---
 
     # Every shift type is covered by at most one resident each day
     for j, _ in enumerate(days):
@@ -129,7 +129,7 @@ def solve_shifts(
     for preset in presets:
         model.add(shifts[preset] == 1)
 
-    # --- conditional constraints ---
+    # --- constraints that reflect rules of the hospital ---
 
     # R1s and R2s work at least one weekend shift
     for i, resident in enumerate(residents):
@@ -288,6 +288,8 @@ def solve_shifts(
                     )
                     <= 6 - math.floor(emergencies[i]) - excuses
                 )
+
+    # --- quality of life constraints ---
 
     # no resident other than R4s can have more than 2 shifts in 6 days (triplete)
     n = 6
