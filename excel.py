@@ -8,12 +8,16 @@ from openpyxl import load_workbook
 import state
 
 
-def load_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
+def load_residents(
+    file_path: str, sheet_name: str, start: int, n_residents: int
+) -> list[state.Resident]:
     """loads resident names & ranks from columns A & B.
 
     args:
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to load data from
+        start: The starting row index for the residents
+        n_residents: The number of residents to load
 
     returns:
         A list of Resident objects
@@ -21,7 +25,7 @@ def load_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
-    ROW_BOUNDS = (3, 23)
+    ROW_BOUNDS = (start - 1, start + n_residents - 2)
 
     residents = []
     for i, row in df.iterrows():
@@ -34,12 +38,16 @@ def load_residents(file_path: str, sheet_name: str) -> list[state.Resident]:
     return residents
 
 
-def load_days(file_path: str, sheet_name: str) -> list[state.Day]:
+def load_days(
+    file_path: str, sheet_name: str, start: int, n_days: int
+) -> list[state.Day]:
     """loads day numbers and weekdays from rows 2 & 3.
 
     args:
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to load data from
+        start: The starting column index for the days
+        n_days: The number of days to load
 
     returns:
         A list of Day objects
@@ -47,7 +55,7 @@ def load_days(file_path: str, sheet_name: str) -> list[state.Day]:
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
-    COL_BOUNDS = (2, 35)
+    COL_BOUNDS = (start - 1, start + n_days - 1)
 
     day_numbers = df.iloc[1, COL_BOUNDS[0] : COL_BOUNDS[1]].dropna().tolist()
     weekdays = df.iloc[2, COL_BOUNDS[0] : COL_BOUNDS[1]].dropna().tolist()
@@ -60,7 +68,13 @@ def load_days(file_path: str, sheet_name: str) -> list[state.Day]:
 
 
 def load_restrictions(
-    file_path: str, sheet_name: str, type_: str
+    file_path: str,
+    sheet_name: str,
+    type_: str,
+    row_start: int,
+    col_start: int,
+    n_residents: int,
+    n_days: int,
 ) -> list[tuple[int, int]]:
     """loads restrictions from the Excel file.
 
@@ -68,6 +82,10 @@ def load_restrictions(
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to load data from
         type_: The type of restriction
+        row_start: The starting row index for the restrictions
+        col_start: The starting column index for the restrictions
+        n_residents: The number of residents
+        n_days: The number of days
 
     returns:
         A list of restricted (resident_index, day_index) tuples with the restrictions
@@ -75,11 +93,11 @@ def load_restrictions(
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
-    ROW_OFFSET = 3
-    COL_OFFSET = 2
+    ROW_OFFSET = row_start - 1
+    COL_OFFSET = col_start - 1
 
-    ROW_BOUNDS = (ROW_OFFSET, 23)
-    COL_BOUNDS = (COL_OFFSET, 35)
+    ROW_BOUNDS = (ROW_OFFSET, n_residents + ROW_OFFSET - 1)
+    COL_BOUNDS = (COL_OFFSET, n_days + COL_OFFSET - 1)
 
     positions = [
         (row_idx - ROW_OFFSET, col_idx - COL_OFFSET)
@@ -91,12 +109,23 @@ def load_restrictions(
     return positions
 
 
-def load_preset_shifts(file_path: str, sheet_name: str) -> list[tuple[int, int, int]]:
+def load_preset_shifts(
+    file_path: str,
+    sheet_name: str,
+    row_start: int,
+    col_start: int,
+    n_residents: int,
+    n_days: int,
+) -> list[tuple[int, int, int]]:
     """loads preset shifts from the Excel file.
 
     args:
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to load data from
+        row_start: The starting row index for the preset shifts
+        col_start: The starting column index for the preset shifts
+        n_residents: The number of residents
+        n_days: The number of days
 
     returns:
         A list of (resident_index, day_index, shift_index) tuples with the preset shifts
@@ -104,11 +133,11 @@ def load_preset_shifts(file_path: str, sheet_name: str) -> list[tuple[int, int, 
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
-    ROW_OFFSET = 3
-    COL_OFFSET = 2
+    ROW_OFFSET = row_start - 1
+    COL_OFFSET = col_start - 1
 
-    ROW_BOUNDS = (ROW_OFFSET, 23)
-    COL_BOUNDS = (COL_OFFSET, 35)
+    ROW_BOUNDS = (ROW_OFFSET, n_residents + ROW_OFFSET - 1)
+    COL_BOUNDS = (COL_OFFSET, n_days + COL_OFFSET - 1)
 
     positions = [
         (row_idx - ROW_OFFSET, col_idx - COL_OFFSET, state.ShiftType[cell].value - 1)
@@ -153,12 +182,17 @@ def is_rowcol_in_bounds(idx: int, bounds: tuple[int, int]) -> bool:
     return bounds[0] <= idx <= bounds[1]
 
 
-def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
+def load_totals(
+    file_path: str, sheet_name: str, row_start: int, col_start: int, n_residents: int
+) -> list[list[int]]:
     """loads totals from the Excel file.
 
     args:
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to load data from
+        row_start: The starting row index for the totals
+        col_start: The starting column index for the totals
+        n_residents: The number of residents
 
     returns:
         A matrix of total shifts of each type for each resident, rows are residents, columns are shift types
@@ -166,8 +200,8 @@ def load_totals(file_path: str, sheet_name: str) -> list[list[int]]:
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
 
-    ROW_BOUNDS = (2, 22)
-    COL_BOUNDS = (1, 4)
+    ROW_BOUNDS = (row_start - 1, row_start + n_residents - 2)
+    COL_BOUNDS = (col_start - 1, col_start + len(state.ShiftType) - 2)
 
     totals = []
     for row_idx, row in df.iterrows():
@@ -201,13 +235,21 @@ def copy_excel_file(original_path: str, fname_extension: str):
     return new_path  # Return the path of the copied file
 
 
-def save_shifts(file_path: str, sheet_name: str, shift_matrix: list[list[str]]):
+def save_shifts(
+    file_path: str,
+    sheet_name: str,
+    shift_matrix: list[list[str]],
+    row_start: int,
+    col_start: int,
+):
     """Introduces the shifts into a given Excel file
 
     args:
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to save data to
         shift_matrix: The matrix of shifts to save
+        row_start: The starting row index for the shifts
+        col_start: The starting column index for the shifts
     """
 
     # Load the existing workbook
@@ -219,8 +261,8 @@ def save_shifts(file_path: str, sheet_name: str, shift_matrix: list[list[str]]):
 
     sheet = wb[sheet_name]
 
-    ROW_OFFSET = 3
-    COL_OFFSET = 2
+    ROW_OFFSET = row_start - 1
+    COL_OFFSET = col_start - 1
 
     for i, row in enumerate(shift_matrix):
         for j, shift in enumerate(row):
@@ -234,21 +276,3 @@ def save_shifts(file_path: str, sheet_name: str, shift_matrix: list[list[str]]):
 
 # TODO: Add function to load totals of Sabados and Viernes-Domingos
 # TODO: Add function to save updated totals
-
-
-if __name__ == "__main__":
-    residents = load_residents("data/Guardias enero.xlsx", "Enero 2025")
-    days = load_days("data/Guardias enero.xlsx", "Enero 2025")
-    v_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "V")
-    u_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "U")
-    ut_positions = load_restrictions("data/Guardias enero.xlsx", "Enero 2025", "UT")
-    totals = load_totals("data/Guardias enero.xlsx", "Global")
-    presets = load_preset_shifts("data/Guardias enero presets.xlsx", "Enero 2025")
-    print(len(residents), residents)
-    print(len(days), days)
-    print(v_positions)
-    print(u_positions)
-    print(ut_positions)
-    print(totals)
-    print()
-    print(presets)
