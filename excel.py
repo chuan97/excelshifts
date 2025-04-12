@@ -67,6 +67,7 @@ def load_days(
     return days
 
 
+# TODO: Make type a list, so it can read different types of restrictions at once
 def load_restrictions(
     file_path: str,
     sheet_name: str,
