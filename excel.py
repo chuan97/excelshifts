@@ -110,6 +110,36 @@ def load_restrictions(
     return positions
 
 
+def load_external_rotations(
+    file_path: str,
+    sheet_name: str,
+    row_start: int,
+    col_start: int,
+    n_residents: int,
+    n_days: int,
+):
+    """loads external rotations from the Excel file.
+
+    args:
+        file_path: The path to the Excel file
+        sheet_name: The name of the sheet to load data from
+        type_: The type of restriction
+        row_start: The starting row index for the restrictions
+        col_start: The starting column index for the restrictions
+        n_residents: The number of residents
+        n_days: The number of days
+
+    returns:
+        A list of residents who are in external rotations
+    """
+
+    e_positions = load_restrictions(
+        file_path, sheet_name, "E", row_start, col_start, n_residents, n_days
+    )
+
+    return set(i for i, _ in e_positions)
+
+
 def load_preset_shifts(
     file_path: str,
     sheet_name: str,

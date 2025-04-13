@@ -23,6 +23,9 @@ ut_positions = excel.load_restrictions(
 p_positions = excel.load_restrictions(
     f_path, sheet_name, "P", row_start, col_start, n_residents, n_days
 )
+external_rotations = excel.load_external_rotations(
+    f_path, sheet_name, row_start, col_start, n_residents, n_days
+)
 totals = excel.load_totals(f_path, "Global", 3, 2, n_residents)
 preset_shifts = excel.load_preset_shifts(
     f_path, sheet_name, row_start, col_start, n_residents, n_days
@@ -35,6 +38,7 @@ shifts_matrix = solve_shifts(
     u_positions,
     ut_positions,
     p_positions,
+    external_rotations,
     preset_shifts,
     totals,
 )

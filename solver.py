@@ -12,7 +12,6 @@ import state
 # TODO: maximimar cobertura de tipos de guardia en función coste
 # TODO: dividir en dos fases, primero check de los R4, señalando normas incumplidas para poder subsanar o ignorar
 #   despues aplicar las optimización al resto de residentes.
-# TODO: quitar exenciones, reprogramar rotantes externos
 # TODO: R4s do only the preset shifts and no others
 
 
@@ -23,6 +22,7 @@ def solve_shifts(
     u_positions: list[tuple[int, int]],
     ut_positions: list[tuple[int, int]],
     p_positions: list[tuple[int, int]],
+    external_rotations: set[int],
     presets: list[tuple[int, int, int]],
     totals: list[list[int]],
 ) -> list[list[str]]:
@@ -35,6 +35,7 @@ def solve_shifts(
         u_positions: The list of restricted (resident, day) tuples due to having emergencies shifts
         ut_positions: The list of restricted (resident, day) tuples due to having afternoon emergencies shifts
         p_positions: The list of (resident, day) tuples indicating holidays and who covers them
+        external_rotations: The set of residents who are in external rotations
         presets: The list of preset shifts as (resident, day, shift) tuples
         totals : The list of current totals for each resident and shift type_
 
@@ -44,7 +45,6 @@ def solve_shifts(
 
     end_of_month = detect_end_of_month(days)
     emergencies = compute_emergency_shifts(u_positions, ut_positions, residents)
-    excused_shifts = compute_excused_shifts(v_positions)
     p_days = compute_p_days(p_positions)
 
     model = cp_model.CpModel()
@@ -62,10 +62,12 @@ def solve_shifts(
 
     # --- discarded constraints ---
 
-    # # Every shift type_ is covered by one resident every day except for R on the weekend
+    # # Every shift type_ is covered by one resident every day except for R on the weekend and holidays
     # for k, _ in enumerate(state.ShiftType):
     #     for j, day in enumerate(days):
-    #         if day.day_of_week not in ["V", "S", "D"] or k != state.ShiftType.R:
+    #         if (
+    #             day.day_of_week not in ["S", "D"] and j not in p_days
+    #         ) or k != state.ShiftType.R:
     #             model.add_exactly_one(
     #                 shifts[(i, j, k)] for i, _ in enumerate(residents)
     #             )
@@ -127,12 +129,13 @@ def solve_shifts(
                             shifts[(i, j, k)]
                         )
 
-    # If a resident has an emergency shift, they cannot do a shift that day or the next
+    # If a resident has an emergency shift, they cannot do a shift that day nor the next or the previous day
     for i, j in u_positions:
         for k, _ in enumerate(state.ShiftType):
             model.add(shifts[(i, j, k)] == 0)
-            if j < len(days) - 1:
+            if 0 < j < len(days) - 1:
                 model.add(shifts[(i, j + 1, k)] == 0)
+                model.add(shifts[(i, j - 1, k)] == 0)
 
     # If a resident has an afternoon emergency shift, they cannot do a shift that day or the day before
     for i, j in ut_positions:
@@ -153,17 +156,23 @@ def solve_shifts(
     #                 if (j_, k_) != (j, k):
     #                     model.add(shifts[(i, j_, k_)] == 0)
 
+    # If a resident is in an external rotation, they cannot do any shifts
+    for i in external_rotations:
+        for j, _ in enumerate(days):
+            for k, _ in enumerate(state.ShiftType):
+                model.add(shifts[(i, j, k)] == 0)
+
     # --- constraints that reflect rules of the hospital ---
-    # TODO: consider exemptions
-    # # R1s and R2s work at least one weekend shift
-    # for i, resident in enumerate(residents):
-    #     if resident.rank in ["R1", "R2"]:
-    #         model.add_at_least_one(
-    #             shifts[(i, j, k)]
-    #             for j, day in enumerate(days)
-    #             if day.day_of_week in ["S", "D"] and j < end_of_month
-    #             for k, _ in enumerate(state.ShiftType)
-    #         )
+
+    # R1s and R2s work at least one weekend shift unless they are in an external rotation
+    for i, resident in enumerate(residents):
+        if resident.rank in ["R1", "R2"] and i not in external_rotations:
+            model.add_at_least_one(
+                shifts[(i, j, k)]
+                for j, day in enumerate(days)
+                if day.day_of_week in ["S", "D"] and j < end_of_month
+                for k, _ in enumerate(state.ShiftType)
+            )
 
     # Residents asigned to a holiday must do a shift that day
     for i, j in p_positions:
@@ -208,9 +217,9 @@ def solve_shifts(
             for k, _ in enumerate(state.ShiftType):
                 model.add(shifts[(i, j + 2, k)] == 0)
 
-    # Every resident does at least one shift of each type_ except R1s that do not do R and residents with two or more excused shifts (SHOULD BE ONLY THREE OR MORE, BUT THEN WE RUN INTO IMPOSSIBILITIES)
+    # Every resident does at least one shift of each type_ except R1s that do not do R and residents in external rotations
     for i, resident in enumerate(residents):
-        if excused_shifts.get(i, 0) < 2:
+        if i not in external_rotations:
             for k, type_ in enumerate(state.ShiftType):
                 if resident.rank != "R1":
                     model.add_at_least_one(
@@ -228,13 +237,18 @@ def solve_shifts(
                     for j, _ in enumerate(days):
                         model.add(shifts[(i, j, k)] == 0)
 
-    # # Every resident does at most two shifts of each type_
-    # for i, _ in enumerate(residents):
-    #     for k, _ in enumerate(state.ShiftType):
-    #         model.add(
-    #             sum(shifts[(i, j, k)] for j, _ in enumerate(days) if j < end_of_month)
-    #             <= 2
-    #         )
+    # Every non R4 resident does at most two shifts of each type_
+    for i, resident in enumerate(residents):
+        if resident.rank != "R4":
+            for k, _ in enumerate(state.ShiftType):
+                model.add(
+                    sum(
+                        shifts[(i, j, k)]
+                        for j, _ in enumerate(days)
+                        if j < end_of_month
+                    )
+                    <= 2
+                )
 
     # R1s and R2s do at most one shift of type_s R and T
     for i, resident in enumerate(residents):
@@ -250,24 +264,9 @@ def solve_shifts(
                 if type_ in [state.ShiftType.G, state.ShiftType.M]:
                     model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
 
-    # # R3s and R4s do exactly six shifts unless they have excuses due to restrictions
-    # for i, resident in enumerate(residents):
-    #     if resident.rank in ["R3", "R4"]:
-    #         excuses = excused_shifts.get(i, 0)
-    #         model.add(
-    #             sum(
-    #                 shifts[(i, j, k)]
-    #                 for j, _ in enumerate(days)
-    #                 if j < end_of_month
-    #                 for k, _ in enumerate(state.ShiftType)
-    #             )
-    #             == 6 - excuses
-    #         )
-
-    # R2s do exactly six shifts after counting their emergencies shifts and excuses
+    # R3s do exactly six shifts unless they are in an external rotation
     for i, resident in enumerate(residents):
-        if resident.rank == "R2":
-            excuses = excused_shifts.get(i, 0)
+        if resident.rank == "R3" and i not in external_rotations:
             model.add(
                 sum(
                     shifts[(i, j, k)]
@@ -275,14 +274,25 @@ def solve_shifts(
                     if j < end_of_month
                     for k, _ in enumerate(state.ShiftType)
                 )
-                == 6 - excuses - int(emergencies[i])
+                == 6
             )
 
-    # R1s do between 5.5 and 6.5 shifts after counting their emergencies shifts
-    # and excuses
+    # R2s do exactly six shifts after counting their emergencies shifts unless they are in an external rotation
     for i, resident in enumerate(residents):
-        if resident.rank == "R1":
-            excuses = excused_shifts.get(i, 0)
+        if resident.rank == "R2" and i not in external_rotations:
+            model.add(
+                sum(
+                    shifts[(i, j, k)]
+                    for j, _ in enumerate(days)
+                    if j < end_of_month
+                    for k, _ in enumerate(state.ShiftType)
+                )
+                == 6 - int(emergencies[i])
+            )
+
+    # R1s do between 5.5 and 6.5 shifts after counting their emergencies shifts unless they are in an external rotation
+    for i, resident in enumerate(residents):
+        if resident.rank == "R1" and i not in external_rotations:
             if int(emergencies[i]) == emergencies[i]:
                 model.add(
                     sum(
@@ -291,7 +301,7 @@ def solve_shifts(
                         if j < end_of_month
                         for k, _ in enumerate(state.ShiftType)
                     )
-                    == 6 - excuses - int(emergencies[i])
+                    == 6 - int(emergencies[i])
                 )
             else:
                 model.add(
@@ -301,7 +311,7 @@ def solve_shifts(
                         if j < end_of_month
                         for k, _ in enumerate(state.ShiftType)
                     )
-                    >= 6 - math.ceil(emergencies[i]) - excuses
+                    >= 6 - math.ceil(emergencies[i])
                 )
                 model.add(
                     sum(
@@ -310,7 +320,7 @@ def solve_shifts(
                         if j < end_of_month
                         for k, _ in enumerate(state.ShiftType)
                     )
-                    <= 6 - math.floor(emergencies[i]) - excuses
+                    <= 6 - math.floor(emergencies[i])
                 )
 
     # --- quality of life constraints ---
@@ -321,13 +331,15 @@ def solve_shifts(
     for i, resident in enumerate(residents):
         if resident.rank != "R4":
             for j in range(len(days) - n):
+                n_u_shifts = compute_n_u_shifts_in_window(u_positions, i, j, n)
+
                 model.add(
                     sum(
-                        shifts[(i, j + m, k)]
+                        shifts[(i, j + j_, k)]
                         for k, _ in enumerate(state.ShiftType)
-                        for m in range(n)
+                        for j_ in range(n)
                     )
-                    <= m
+                    <= m - n_u_shifts
                 )
 
     # ------ OBJECTIVE FUNCTION ------
@@ -415,37 +427,6 @@ def compute_emergency_shifts(
     return emergencies
 
 
-def compute_excused_shifts(v_positions: list[tuple[int, int]]) -> dict[int, int]:
-    """Compute the number of five-day vacation streaks for each resident
-
-    Args:
-        v_positions: The list of restricted (resident, day) tuples
-
-    Returns:
-        A dictionary with the (resident, excuses) pairs
-    """
-
-    # from v_positions which is sorted by resident and day within resident, compute the number of five-day vacation streaks for each resident
-    last_i = v_positions[0][0]
-    last_j = -1
-    count = 1
-    excused_shifts = {}
-    for i, j in v_positions:
-        if i != last_i:
-            excuses = count // 5
-            if excuses:
-                excused_shifts[last_i] = excuses
-            last_i = i
-            count = 1
-
-        if j == last_j + 1:
-            count += 1
-
-        last_j = j
-
-    return excused_shifts
-
-
 def compute_p_days(p_positions: list[tuple[int, int]]) -> set[int]:
     """Compute the set of days that are holidays
 
@@ -456,6 +437,24 @@ def compute_p_days(p_positions: list[tuple[int, int]]) -> set[int]:
     """
 
     return set(day for _, day in p_positions)
+
+
+def compute_n_u_shifts_in_window(
+    u_positions: list[tuple[int, int]], i: int, j: int, win_size: int
+) -> int:
+    """Compute the number of emergency shifts in a given window for a resident
+
+    Args:
+        u_positions: The list of restricted (resident, day) tuples due to having emergencies shifts
+        i: The resident index
+        j: The day index
+        window_size: The size of the window of days from j onward
+
+    Returns:
+        The number of emergency shifts in the given window for the resident
+    """
+
+    return sum(1 for j_ in range(win_size) if (i, j + j_) in u_positions)
 
 
 if __name__ == "__main__":
