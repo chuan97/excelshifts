@@ -144,6 +144,14 @@ def solve_shifts(
             if j > 0:
                 model.add(shifts[(i, j - 1, k)] == 0)
 
+    # If a resident is in an external rotation, they cannot do any shifts
+    for i in external_rotations:
+        for j, _ in enumerate(days):
+            for k, _ in enumerate(state.ShiftType):
+                model.add(shifts[(i, j, k)] == 0)
+
+    # --- constraints that reflect rules of the hospital ---
+
     # Enforce presets, and no other shifts for R4s
     for i, resident in enumerate(residents):
         for j, _ in enumerate(days):
@@ -152,14 +160,6 @@ def solve_shifts(
                     model.add(shifts[(i, j, k)] == 1)
                 elif resident.rank == "R4":
                     model.add(shifts[(i, j, k)] == 0)
-
-    # If a resident is in an external rotation, they cannot do any shifts
-    for i in external_rotations:
-        for j, _ in enumerate(days):
-            for k, _ in enumerate(state.ShiftType):
-                model.add(shifts[(i, j, k)] == 0)
-
-    # --- constraints that reflect rules of the hospital ---
 
     # R1s and R2s work at least one weekend shift unless they are in an external rotation
     for i, resident in enumerate(residents):
