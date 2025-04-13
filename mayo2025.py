@@ -29,7 +29,14 @@ preset_shifts = excel.load_preset_shifts(
 )
 
 shifts_matrix = solve_shifts(
-    residents, days, v_positions, u_positions, ut_positions, preset_shifts, totals
+    residents,
+    days,
+    v_positions,
+    u_positions,
+    ut_positions,
+    p_positions,
+    preset_shifts,
+    totals,
 )
 print(shifts_matrix)
 f_path_out = excel.copy_excel_file(f_path, "_solved")
