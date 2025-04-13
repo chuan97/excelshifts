@@ -12,7 +12,7 @@ import state
 # TODO: maximimar cobertura de tipos de guardia en función coste
 # TODO: dividir en dos fases, primero check de los R4, señalando normas incumplidas para poder subsanar o ignorar
 #   despues aplicar las optimización al resto de residentes.
-# TODO: R4s do only the preset shifts and no others
+# TODO: Equilibrar fines de semana
 
 
 def solve_shifts(
@@ -144,17 +144,14 @@ def solve_shifts(
             if j > 0:
                 model.add(shifts[(i, j - 1, k)] == 0)
 
-    # If there are preset shifts, enforce those
-    for preset in presets:
-        model.add(shifts[preset] == 1)
-
-    # # R4s do not do any shifts other than the preset ones
-    # for i, j, k in presets:
-    #     if residents[i].rank == "R4":
-    #         for j_ in range(len(days)):
-    #             for k_ in range(len(state.ShiftType)):
-    #                 if (j_, k_) != (j, k):
-    #                     model.add(shifts[(i, j_, k_)] == 0)
+    # Enforce presets, and no other shifts for R4s
+    for i, resident in enumerate(residents):
+        for j, _ in enumerate(days):
+            for k, _ in enumerate(state.ShiftType):
+                if (i, j, k) in presets:
+                    model.add(shifts[(i, j, k)] == 1)
+                elif resident.rank == "R4":
+                    model.add(shifts[(i, j, k)] == 0)
 
     # If a resident is in an external rotation, they cannot do any shifts
     for i in external_rotations:
