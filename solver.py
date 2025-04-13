@@ -452,36 +452,3 @@ def compute_n_u_shifts_in_window(
     """
 
     return sum(1 for j_ in range(win_size) if (i, j + j_) in u_positions)
-
-
-if __name__ == "__main__":
-    f_path = "data/Guardias enero presets rot ext.xlsx"
-    sheet_name = "Enero 2025"
-
-    row_start = 4
-    col_start = 3
-    n_residents = 21
-    n_days = 33
-
-    residents = excel.load_residents(f_path, sheet_name, row_start, n_residents)
-    days = excel.load_days(f_path, sheet_name, col_start, n_days)
-    v_positions = excel.load_restrictions(
-        f_path, sheet_name, "V", row_start, col_start, n_residents, n_days
-    )
-    u_positions = excel.load_restrictions(
-        f_path, sheet_name, "U", row_start, col_start, n_residents, n_days
-    )
-    ut_positions = excel.load_restrictions(
-        f_path, sheet_name, "UT", row_start, col_start, n_residents, n_days
-    )
-    totals = excel.load_totals(f_path, "Global", 3, 2, n_residents)
-    preset_shifts = excel.load_preset_shifts(
-        f_path, sheet_name, row_start, col_start, n_residents, n_days
-    )
-
-    shifts_matrix = solve_shifts(
-        residents, days, v_positions, u_positions, ut_positions, preset_shifts, totals
-    )
-    print(shifts_matrix)
-    f_path_out = excel.copy_excel_file(f_path, "_solved")
-    excel.save_shifts(f_path_out, sheet_name, shifts_matrix, row_start, col_start)
