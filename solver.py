@@ -12,7 +12,7 @@ import state
 # TODO: maximimar cobertura de tipos de guardia en función coste
 # TODO: dividir en dos fases, primero check de los R4, señalando normas incumplidas para poder subsanar o ignorar
 #   despues aplicar las optimización al resto de residentes.
-# TODO: Equilibrar fines de semana
+# TODO: Totals is not updated in the input excel so it is useless
 
 
 def solve_shifts(
@@ -214,7 +214,8 @@ def solve_shifts(
             for k, _ in enumerate(state.ShiftType):
                 model.add(shifts[(i, j + 2, k)] == 0)
 
-    # Every resident does at least one shift of each type_ except R1s that do not do R and residents in external rotations
+    # Every resident does at least one shift of each type_
+    # except R1s that do not do R and residents in external rotations
     for i, resident in enumerate(residents):
         if i not in external_rotations:
             for k, type_ in enumerate(state.ShiftType):
@@ -274,7 +275,8 @@ def solve_shifts(
                 == 6
             )
 
-    # R2s do exactly six shifts after counting their emergencies shifts unless they are in an external rotation
+    # R2s do exactly six shifts after counting their emergencies shifts
+    # unless they are in an external rotation
     for i, resident in enumerate(residents):
         if resident.rank == "R2" and i not in external_rotations:
             model.add(
@@ -287,7 +289,8 @@ def solve_shifts(
                 == 6 - int(emergencies[i])
             )
 
-    # R1s do between 5.5 and 6.5 shifts after counting their emergencies shifts unless they are in an external rotation
+    # R1s do between 5.5 and 6.5 shifts after counting their emergencies shifts
+    # unless they are in an external rotation
     for i, resident in enumerate(residents):
         if resident.rank == "R1" and i not in external_rotations:
             if int(emergencies[i]) == emergencies[i]:
@@ -354,16 +357,21 @@ def solve_shifts(
 
     # ------ OBJECTIVE FUNCTIONS ------
 
-    # Minimize the difference between the total number of shifts of each type for each resident
-    # Establish the two shift types with the least total number as preferences for each resident
-    preferences = []
-    for i, _ in enumerate(residents):
-        sorted_totals = np.argsort(totals[i])
-        preferences.append(list(sorted_totals[:2]))
+    # # Minimize the difference between the total number of shifts of each type for each resident
+    # # I.e. establish the two shift types with the least total number as preferences for each resident
+    # preferences = []
+    # for i, _ in enumerate(residents):
+    #     sorted_totals = np.argsort(totals[i])
+    #     preferences.append(list(sorted_totals[:2]))
 
-    for i, _ in enumerate(residents):
-        for k in preferences[i]:
-            model.maximize(sum(shifts[(i, j, k)] for j, _ in enumerate(days)))
+    # for i, _ in enumerate(residents):
+    #     for k in preferences[i]:
+    #         model.maximize(sum(shifts[(i, j, k)] for j, _ in enumerate(days)))
+
+    # Maximize the number of covered shifts
+    for j, day in enumerate(days):
+        for k, type_ in enumerate(state.ShiftType):
+            model.maximize(sum(shifts[(i, j, k)] for i, _ in enumerate(residents)))
 
     # ------ SOLVE THE MODEL ------
 
