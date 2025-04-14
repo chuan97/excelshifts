@@ -339,7 +339,20 @@ def solve_shifts(
                     <= m - n_u_shifts
                 )
 
-    # ------ OBJECTIVE FUNCTION ------
+    # no resident other than R4s can work more than 2 weekends or holidays in a month
+    for i, resident in enumerate(residents):
+        if resident.rank != "R4":
+            model.add(
+                sum(
+                    shifts[(i, j, k)]
+                    for j, day in enumerate(days)
+                    if day.day_of_week in ["S", "D"] or j in p_days
+                    for k, _ in enumerate(state.ShiftType)
+                )
+                <= 2
+            )
+
+    # ------ OBJECTIVE FUNCTIONS ------
 
     # Minimize the difference between the total number of shifts of each type for each resident
     # Establish the two shift types with the least total number as preferences for each resident
