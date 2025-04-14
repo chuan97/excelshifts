@@ -1,12 +1,9 @@
 """Module to implement the contraint programming routine"""
 
 import math
-from operator import add
 
-import numpy as np
 from ortools.sat.python import cp_model
 
-import excel
 import state
 
 # TODO: maximimar cobertura de tipos de guardia en función coste
