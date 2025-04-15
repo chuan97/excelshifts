@@ -43,6 +43,7 @@ def solve_shifts(
     end_of_month = detect_end_of_month(days)
     emergencies = compute_emergency_shifts(u_positions, ut_positions, residents)
     p_days = compute_p_days(p_positions)
+    weekend_emergencies = compute_weekend_emergencies(u_positions, days, p_days)
 
     model = cp_model.CpModel()
 
@@ -347,10 +348,10 @@ def solve_shifts(
                 sum(
                     shifts[(i, j, k)]
                     for j, day in enumerate(days)
-                    if day.day_of_week in ["S", "D"] or j in p_days
+                    if day.day_of_week in ["S", "D"] or j in p_days and j < end_of_month
                     for k, _ in enumerate(state.ShiftType)
                 )
-                <= 2
+                <= 2 - weekend_emergencies.get(i, 0)
             )
 
     # no resident other than R4s can work more than 1 sunday (i.e. friday + sunday combo)
@@ -360,7 +361,7 @@ def solve_shifts(
                 sum(
                     shifts[i, j, k]
                     for j, day in enumerate(days)
-                    if day.day_of_week == "D"
+                    if day.day_of_week == "D" and j < end_of_month
                     for k, _ in enumerate(state.ShiftType)
                 )
                 <= 1
@@ -466,6 +467,34 @@ def compute_p_days(p_positions: list[tuple[int, int]]) -> set[int]:
     """
 
     return set(day for _, day in p_positions)
+
+
+def compute_weekend_emergencies(
+    u_positions: list[tuple[int, int]],
+    days: list[state.Day],
+    p_days: set[int],
+) -> dict[int, int]:
+    """Compute the number of weekend or holiday emergencies for each resident
+
+    Args:
+        u_positions: The list of restricted (resident, day) tuples due to having emergencies shifts
+        days: The list of days
+        p_days: The set of days that are holidays
+
+    Returns:
+        A dictionary with the number of weekend emergencies for each resident
+    """
+
+    weekend_emergencies = {}
+    for i, j in u_positions:
+        if (
+            days[j].day_of_week in ["V", "S", "D"]
+            or j in p_days
+            and (i, j - 2) not in u_positions
+        ):
+            weekend_emergencies[i] = weekend_emergencies.get(i, 0) + 1
+
+    return weekend_emergencies
 
 
 def compute_n_u_shifts_in_window(
