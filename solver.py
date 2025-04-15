@@ -339,6 +339,7 @@ def solve_shifts(
                     <= m - n_u_shifts
                 )
 
+    # TODO: tener en cuenta urgencias y viernes
     # no resident other than R4s can work more than 2 weekends or holidays in a month
     for i, resident in enumerate(residents):
         if resident.rank != "R4":
@@ -350,6 +351,19 @@ def solve_shifts(
                     for k, _ in enumerate(state.ShiftType)
                 )
                 <= 2
+            )
+
+    # no resident other than R4s can work more than 1 sunday (i.e. friday + sunday combo)
+    for i, resident in enumerate(residents):
+        if resident.rank != "R4":
+            model.add(
+                sum(
+                    shifts[i, j, k]
+                    for j, day in enumerate(days)
+                    if day.day_of_week == "D"
+                    for k, _ in enumerate(state.ShiftType)
+                )
+                <= 1
             )
 
     # ------ OBJECTIVE FUNCTIONS ------
