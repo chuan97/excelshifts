@@ -12,16 +12,22 @@ n_days = 32
 residents = excel.load_residents(f_path, sheet_name, row_start, n_residents)
 days = excel.load_days(f_path, sheet_name, col_start, n_days)
 v_positions = excel.load_restrictions(
-    f_path, sheet_name, "V", row_start, col_start, n_residents, n_days
+    f_path,
+    sheet_name,
+    ["V", "B", "Mo", "Cu", "Co", "Con"],
+    row_start,
+    col_start,
+    n_residents,
+    n_days,
 )
 u_positions = excel.load_restrictions(
-    f_path, sheet_name, "U", row_start, col_start, n_residents, n_days
+    f_path, sheet_name, ["U"], row_start, col_start, n_residents, n_days
 )
 ut_positions = excel.load_restrictions(
-    f_path, sheet_name, "UT", row_start, col_start, n_residents, n_days
+    f_path, sheet_name, ["UT"], row_start, col_start, n_residents, n_days
 )
 p_positions = excel.load_restrictions(
-    f_path, sheet_name, "P", row_start, col_start, n_residents, n_days
+    f_path, sheet_name, ["P"], row_start, col_start, n_residents, n_days
 )
 external_rotations = excel.load_external_rotations(
     f_path, sheet_name, row_start, col_start, n_residents, n_days

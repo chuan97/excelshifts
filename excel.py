@@ -67,11 +67,10 @@ def load_days(
     return days
 
 
-# TODO: Make type a list, so it can read different types of restrictions at once
 def load_restrictions(
     file_path: str,
     sheet_name: str,
-    type_: str,
+    types: list[str],
     row_start: int,
     col_start: int,
     n_residents: int,
@@ -82,7 +81,7 @@ def load_restrictions(
     args:
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to load data from
-        type_: The type of restriction
+        types: The types of restrictions
         row_start: The starting row index for the restrictions
         col_start: The starting column index for the restrictions
         n_residents: The number of residents
@@ -104,7 +103,7 @@ def load_restrictions(
         (row_idx - ROW_OFFSET, col_idx - COL_OFFSET)
         for row_idx, row in df.iterrows()
         for col_idx, cell in enumerate(row)
-        if is_cell_in_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS) and cell == type_
+        if is_cell_in_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS) and cell in types
     ]
 
     return positions
@@ -123,7 +122,6 @@ def load_external_rotations(
     args:
         file_path: The path to the Excel file
         sheet_name: The name of the sheet to load data from
-        type_: The type of restriction
         row_start: The starting row index for the restrictions
         col_start: The starting column index for the restrictions
         n_residents: The number of residents
@@ -134,7 +132,7 @@ def load_external_rotations(
     """
 
     e_positions = load_restrictions(
-        file_path, sheet_name, "E", row_start, col_start, n_residents, n_days
+        file_path, sheet_name, ["E"], row_start, col_start, n_residents, n_days
     )
 
     return set(i for i, _ in e_positions)
