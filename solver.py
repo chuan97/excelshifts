@@ -6,7 +6,6 @@ from ortools.sat.python import cp_model
 
 import state
 
-# TODO: maximimar cobertura de tipos de guardia en función coste
 # TODO: dividir en dos fases, primero check de los R4, señalando normas incumplidas para poder subsanar o ignorar
 #   despues aplicar las optimización al resto de residentes.
 # TODO: Totals is not updated in the input excel so it is useless
@@ -119,6 +118,26 @@ def solve_shifts(
     for j, _ in enumerate(days):
         for k, _ in enumerate(state.ShiftType):
             model.add_at_most_one(shifts[(i, j, k)] for i, _ in enumerate(residents))
+
+    # In any given day, either G or T must be covered
+    for j, _ in enumerate(days):
+        model.add_at_least_one(
+            shifts[(i, j, k)]
+            for i, _ in enumerate(residents)
+            for k, type_ in enumerate(state.ShiftType)
+            if type_.name in ["G", "T"]
+        )
+
+    # At most only two types of shift can be uncovered each day
+    for j, day in enumerate(days):
+        model.add(
+            sum(
+                shifts[(i, j, k)]
+                for i, _ in enumerate(residents)
+                for k, _ in enumerate(state.ShiftType)
+            )
+            >= (1 if day.day_of_week in ["S", "D"] or j in p_days else 2)
+        )
 
     # - about the number of shifts -
 
@@ -234,6 +253,7 @@ def solve_shifts(
 
     # - about the weekend shifts -
 
+    # TODO: que sea todo el mundo
     # R1s and R2s work at least one weekend shift unless they are in an external rotation
     for i, resident in enumerate(residents):
         if resident.rank in ["R1", "R2"] and i not in external_rotations:
