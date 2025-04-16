@@ -58,38 +58,6 @@ def solve_shifts(
 
     # ------ CREATE THE CONSTRAINTS ------
 
-    # --- discarded constraints ---
-
-    # # Every shift type_ is covered by one resident every day except for R on the weekend and holidays
-    # for k, _ in enumerate(state.ShiftType):
-    #     for j, day in enumerate(days):
-    #         if (
-    #             day.day_of_week not in ["S", "D"] and j not in p_days
-    #         ) or k != state.ShiftType.R:
-    #             model.add_exactly_one(
-    #                 shifts[(i, j, k)] for i, _ in enumerate(residents)
-    #             )
-
-    # # each resident other than R4s does at most one shift on thursday to promote equidistribution
-    # for i, resident in enumerate(residents):
-    #     if resident != "R4":
-    #         model.add_at_most_one(
-    #             shifts[(i, j, k)]
-    #             for j, day in enumerate(days)
-    #             if day.day_of_week == "J" and j < end_of_month
-    #             for k, _ in enumerate(state.ShiftType)
-    #         )
-
-    # # R3s work one and only one weekend shift
-    # for i, resident in enumerate(residents):
-    #     if resident.rank == "R3":
-    #         model.add_exactly_one(
-    #             shifts[(i, j, k)]
-    #             for j, day in enumerate(days)
-    #             if day.day_of_week in ["S", "D"] and j < end_of_month
-    #             for k, _ in enumerate(state.ShiftType)
-    #         )
-
     # --- basic constraints ---
 
     # Every shift type is covered by at most one resident each day
@@ -150,6 +118,8 @@ def solve_shifts(
 
     # --- constraints that reflect rules of the hospital ---
 
+    # - about the number of shifts -
+
     # Enforce presets, and no other shifts for R4s
     for i, resident in enumerate(residents):
         for j, _ in enumerate(days):
@@ -159,106 +129,9 @@ def solve_shifts(
                 elif resident.rank == "R4":
                     model.add(shifts[(i, j, k)] == 0)
 
-    # R1s and R2s work at least one weekend shift unless they are in an external rotation
-    for i, resident in enumerate(residents):
-        if resident.rank in ["R1", "R2"] and i not in external_rotations:
-            model.add_at_least_one(
-                shifts[(i, j, k)]
-                for j, day in enumerate(days)
-                if day.day_of_week in ["S", "D"] and j < end_of_month
-                for k, _ in enumerate(state.ShiftType)
-            )
-
     # Residents asigned to a holiday must do a shift that day
     for i, j in p_positions:
         model.add(sum(shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType)) == 1)
-
-    # If a resident does a friday shift of a type different thank R they must do the following sunday shift
-    for i, _ in enumerate(residents):
-        for j, day in enumerate(days):
-            if day.day_of_week == "V":
-                model.add(
-                    sum(
-                        shifts[(i, j, k)]
-                        for k, type_ in enumerate(state.ShiftType)
-                        if type_ != state.ShiftType.R
-                    )
-                    == sum(shifts[(i, j + 2, k)] for k, _ in enumerate(state.ShiftType))
-                )
-
-    # but the sunday shift must be a different type_ than the friday shift
-    for i, _ in enumerate(residents):
-        for j, day in enumerate(days):
-            if day.day_of_week == "V":
-                for k, type_ in enumerate(state.ShiftType):
-                    model.add(shifts[(i, j + 2, k)] == 0).only_enforce_if(
-                        shifts[(i, j, k)]
-                    )
-
-    # If a resident that is not R4 does a shift on a saturday, they cannot do a shift the following monday
-    for i, resident in enumerate(residents):
-        if resident.rank != "R4":
-            for j, day in enumerate(days):
-                if day.day_of_week == "S" and j < len(days) - 2:
-                    for k, _ in enumerate(state.ShiftType):
-                        for p, _ in enumerate(state.ShiftType):
-                            model.add(shifts[(i, j + 2, p)] == 0).only_enforce_if(
-                                shifts[(i, j, k)]
-                            )
-
-    # If an R1 or R2 had an emergencies shift on a saturday, they cannot do a shift the following monday
-    for i, j in u_positions:
-        if days[j].day_of_week == "S" and j < len(days) - 2:
-            for k, _ in enumerate(state.ShiftType):
-                model.add(shifts[(i, j + 2, k)] == 0)
-
-    # Every resident does at least one shift of each type_
-    # except R1s that do not do R and residents in external rotations
-    for i, resident in enumerate(residents):
-        if i not in external_rotations:
-            for k, type_ in enumerate(state.ShiftType):
-                if resident.rank != "R1":
-                    model.add_at_least_one(
-                        shifts[(i, j, k)]
-                        for j, _ in enumerate(days)
-                        if j < end_of_month
-                    )
-                elif type_ != state.ShiftType.R:
-                    model.add_at_least_one(
-                        shifts[(i, j, k)]
-                        for j, _ in enumerate(days)
-                        if j < end_of_month
-                    )
-                else:
-                    for j, _ in enumerate(days):
-                        model.add(shifts[(i, j, k)] == 0)
-
-    # Every non R4 resident does at most two shifts of each type_
-    for i, resident in enumerate(residents):
-        if resident.rank != "R4":
-            for k, _ in enumerate(state.ShiftType):
-                model.add(
-                    sum(
-                        shifts[(i, j, k)]
-                        for j, _ in enumerate(days)
-                        if j < end_of_month
-                    )
-                    <= 2
-                )
-
-    # R1s and R2s do at most one shift of type_s R and T
-    for i, resident in enumerate(residents):
-        if resident.rank in ["R1", "R2"]:
-            for k, type_ in enumerate(state.ShiftType):
-                if type_ in [state.ShiftType.R, state.ShiftType.T]:
-                    model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
-
-    # R3s do at most one shift of type_ G and M
-    for i, resident in enumerate(residents):
-        if resident.rank == "R3":
-            for k, type_ in enumerate(state.ShiftType):
-                if type_ in [state.ShiftType.G, state.ShiftType.M]:
-                    model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
 
     # R3s do exactly six shifts unless they are in an external rotation
     for i, resident in enumerate(residents):
@@ -320,6 +193,94 @@ def solve_shifts(
                     )
                     <= 6 - math.floor(emergencies[i])
                 )
+
+    # - about the distribution of shifts -
+
+    # Every resident does at least one shift of each type_
+    # except R1s that do not do R and residents in external rotations
+    for i, resident in enumerate(residents):
+        if i not in external_rotations:
+            for k, type_ in enumerate(state.ShiftType):
+                if resident.rank != "R1":
+                    model.add_at_least_one(
+                        shifts[(i, j, k)]
+                        for j, _ in enumerate(days)
+                        if j < end_of_month
+                    )
+                elif type_ != state.ShiftType.R:
+                    model.add_at_least_one(
+                        shifts[(i, j, k)]
+                        for j, _ in enumerate(days)
+                        if j < end_of_month
+                    )
+                else:
+                    for j, _ in enumerate(days):
+                        model.add(shifts[(i, j, k)] == 0)
+
+    # Every non R4 resident does at most two shifts of each type_
+    for i, resident in enumerate(residents):
+        if resident.rank != "R4":
+            for k, _ in enumerate(state.ShiftType):
+                model.add(
+                    sum(
+                        shifts[(i, j, k)]
+                        for j, _ in enumerate(days)
+                        if j < end_of_month
+                    )
+                    <= 2
+                )
+
+    # - about the weekend shifts -
+
+    # R1s and R2s work at least one weekend shift unless they are in an external rotation
+    for i, resident in enumerate(residents):
+        if resident.rank in ["R1", "R2"] and i not in external_rotations:
+            model.add_at_least_one(
+                shifts[(i, j, k)]
+                for j, day in enumerate(days)
+                if day.day_of_week in ["S", "D"] and j < end_of_month
+                for k, _ in enumerate(state.ShiftType)
+            )
+
+    # Friday -> Sunday
+    # If a resident does a friday shift of a type different thank R they must do the following sunday shift
+    for i, _ in enumerate(residents):
+        for j, day in enumerate(days):
+            if day.day_of_week == "V":
+                model.add(
+                    sum(
+                        shifts[(i, j, k)]
+                        for k, type_ in enumerate(state.ShiftType)
+                        if type_ != state.ShiftType.R
+                    )
+                    == sum(shifts[(i, j + 2, k)] for k, _ in enumerate(state.ShiftType))
+                )
+
+    # but the sunday shift must be a different type_ than the friday shift
+    for i, _ in enumerate(residents):
+        for j, day in enumerate(days):
+            if day.day_of_week == "V":
+                for k, type_ in enumerate(state.ShiftType):
+                    model.add(shifts[(i, j + 2, k)] == 0).only_enforce_if(
+                        shifts[(i, j, k)]
+                    )
+
+    # If a resident that is not R4 does a shift on a saturday, they cannot do a shift the following monday
+    for i, resident in enumerate(residents):
+        if resident.rank != "R4":
+            for j, day in enumerate(days):
+                if day.day_of_week == "S" and j < len(days) - 2:
+                    for k, _ in enumerate(state.ShiftType):
+                        for p, _ in enumerate(state.ShiftType):
+                            model.add(shifts[(i, j + 2, p)] == 0).only_enforce_if(
+                                shifts[(i, j, k)]
+                            )
+
+    # If an R1 or R2 had an emergencies shift on a saturday, they cannot do a shift the following monday
+    for i, j in u_positions:
+        if days[j].day_of_week == "S" and j < len(days) - 2:
+            for k, _ in enumerate(state.ShiftType):
+                model.add(shifts[(i, j + 2, k)] == 0)
 
     # --- quality of life constraints ---
 
@@ -513,3 +474,50 @@ def compute_n_u_shifts_in_window(
     """
 
     return sum(1 for j_ in range(win_size) if (i, j + j_) in u_positions)
+
+
+# --- discarded constraints ---
+
+# # Every shift type_ is covered by one resident every day except for R on the weekend and holidays
+# for k, _ in enumerate(state.ShiftType):
+#     for j, day in enumerate(days):
+#         if (
+#             day.day_of_week not in ["S", "D"] and j not in p_days
+#         ) or k != state.ShiftType.R:
+#             model.add_exactly_one(
+#                 shifts[(i, j, k)] for i, _ in enumerate(residents)
+#             )
+
+# # each resident other than R4s does at most one shift on thursday to promote equidistribution
+# for i, resident in enumerate(residents):
+#     if resident != "R4":
+#         model.add_at_most_one(
+#             shifts[(i, j, k)]
+#             for j, day in enumerate(days)
+#             if day.day_of_week == "J" and j < end_of_month
+#             for k, _ in enumerate(state.ShiftType)
+#         )
+
+# # R3s work one and only one weekend shift
+# for i, resident in enumerate(residents):
+#     if resident.rank == "R3":
+#         model.add_exactly_one(
+#             shifts[(i, j, k)]
+#             for j, day in enumerate(days)
+#             if day.day_of_week in ["S", "D"] and j < end_of_month
+#             for k, _ in enumerate(state.ShiftType)
+#         )
+
+# # R1s and R2s do at most one shift of type_s R and T
+# for i, resident in enumerate(residents):
+#     if resident.rank in ["R1", "R2"]:
+#         for k, type_ in enumerate(state.ShiftType):
+#             if type_ in [state.ShiftType.R, state.ShiftType.T]:
+#                 model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
+
+# # R3s do at most one shift of type_ G and M
+# for i, resident in enumerate(residents):
+#     if resident.rank == "R3":
+#         for k, type_ in enumerate(state.ShiftType):
+#             if type_ in [state.ShiftType.G, state.ShiftType.M]:
+#                 model.add_at_most_one(shifts[(i, j, k)] for j, _ in enumerate(days))
