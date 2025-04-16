@@ -49,7 +49,7 @@ def solve_shifts(
 
     # ------ CREATE THE VARIABLES ------
 
-    # shifts[(i, j, k)] = 1 if resident i is assigned to day j with shift type_ k
+    # shifts[(i, j, k)] == 1 if resident i is assigned to day j with shift type k
     shifts = {}
     for i, _ in enumerate(residents):
         for j, _ in enumerate(days):
@@ -58,12 +58,7 @@ def solve_shifts(
 
     # ------ CREATE THE CONSTRAINTS ------
 
-    # --- basic constraints ---
-
-    # Every shift type is covered by at most one resident each day
-    for j, _ in enumerate(days):
-        for k, _ in enumerate(state.ShiftType):
-            model.add_at_most_one(shifts[(i, j, k)] for i, _ in enumerate(residents))
+    # --- basic (physical) constraints ---
 
     # Every resident has at most one shift per day
     for i, _ in enumerate(residents):
@@ -117,6 +112,13 @@ def solve_shifts(
                 model.add(shifts[(i, j, k)] == 0)
 
     # --- constraints that reflect rules of the hospital ---
+
+    # - about the coverage of shifts -
+
+    # Every shift type is covered by at most one resident each day
+    for j, _ in enumerate(days):
+        for k, _ in enumerate(state.ShiftType):
+            model.add_at_most_one(shifts[(i, j, k)] for i, _ in enumerate(residents))
 
     # - about the number of shifts -
 
