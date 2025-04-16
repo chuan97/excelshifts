@@ -136,8 +136,27 @@ def solve_shifts(
                 for i, _ in enumerate(residents)
                 for k, _ in enumerate(state.ShiftType)
             )
-            >= (1 if day.day_of_week in ["S", "D"] or j in p_days else 2)
+            > (1 if day.day_of_week in ["V", "S", "D"] or j in p_days else 2)
         )
+
+    # The same type cannot be uncovered both days of a weekend
+    for j, day in enumerate(days):
+        if day.day_of_week == "S" and j < len(days) - 1:
+            for k, type_ in enumerate(state.ShiftType):
+                if type_.name != "R":
+                    model.add_at_least_one(
+                        [shifts[(i, j, k)] for i, _ in enumerate(residents)]
+                        + [shifts[(i, j + 1, k)] for i, _ in enumerate(residents)]
+                    )
+
+    # TODO: should be a softer constraint, where there is only R on Fridays if every other day is covered
+    # No R on Fridays
+    for i, _ in enumerate(residents):
+        for j, day in enumerate(days):
+            if day.day_of_week == "V":
+                for k, type_ in enumerate(state.ShiftType):
+                    if type_.name == "R":
+                        model.add(shifts[(i, j, k)] == 0)
 
     # - about the number of shifts -
 
