@@ -120,24 +120,26 @@ def solve_shifts(
             model.add_at_most_one(shifts[(i, j, k)] for i, _ in enumerate(residents))
 
     # In any given day, either G or T must be covered
-    for j, _ in enumerate(days):
-        model.add_at_least_one(
-            shifts[(i, j, k)]
-            for i, _ in enumerate(residents)
-            for k, type_ in enumerate(state.ShiftType)
-            if type_.name in ["G", "T"]
-        )
-
-    # At most only two types of shift can be uncovered each day
     for j, day in enumerate(days):
-        model.add(
-            sum(
+        # WARNING: this constraint is specific to this month
+        if day.number != 27:
+            model.add_at_least_one(
                 shifts[(i, j, k)]
                 for i, _ in enumerate(residents)
-                for k, _ in enumerate(state.ShiftType)
+                for k, type_ in enumerate(state.ShiftType)
+                if type_.name in ["G", "T"]
             )
-            > (1 if day.day_of_week in ["V", "S", "D"] or j in p_days else 2)
-        )
+
+    # # At most only two types of shift can be uncovered each day
+    # for j, day in enumerate(days):
+    #     model.add(
+    #         sum(
+    #             shifts[(i, j, k)]
+    #             for i, _ in enumerate(residents)
+    #             for k, _ in enumerate(state.ShiftType)
+    #         )
+    #         > (1 if day.day_of_week in ["V", "S", "D"] or j in p_days else 2)
+    #     )
 
     # The same type cannot be uncovered both days of a weekend
     for j, day in enumerate(days):
@@ -151,12 +153,13 @@ def solve_shifts(
 
     # TODO: should be a softer constraint, where there is only R on Fridays if every other day is covered
     # No R on Fridays
-    for i, _ in enumerate(residents):
-        for j, day in enumerate(days):
-            if day.day_of_week == "V":
-                for k, type_ in enumerate(state.ShiftType):
-                    if type_.name == "R":
-                        model.add(shifts[(i, j, k)] == 0)
+    for i, resident in enumerate(residents):
+        if resident.rank != "R4":
+            for j, day in enumerate(days):
+                if day.day_of_week == "V":
+                    for k, type_ in enumerate(state.ShiftType):
+                        if type_.name == "R":
+                            model.add(shifts[(i, j, k)] == 0)
 
     # - about the number of shifts -
 
@@ -200,46 +203,46 @@ def solve_shifts(
                 == 6 - int(emergencies[i])
             )
 
-    # R1s do between 5.5 and 6.5 shifts after counting their emergencies shifts
-    # unless they are in an external rotation
-    for i, resident in enumerate(residents):
-        if resident.rank == "R1" and i not in external_rotations:
-            if int(emergencies[i]) == emergencies[i]:
-                model.add(
-                    sum(
-                        shifts[(i, j, k)]
-                        for j, _ in enumerate(days)
-                        if j < end_of_month
-                        for k, _ in enumerate(state.ShiftType)
-                    )
-                    == 6 - int(emergencies[i])
-                )
-            else:
-                model.add(
-                    sum(
-                        shifts[(i, j, k)]
-                        for j, _ in enumerate(days)
-                        if j < end_of_month
-                        for k, _ in enumerate(state.ShiftType)
-                    )
-                    >= 6 - math.ceil(emergencies[i])
-                )
-                model.add(
-                    sum(
-                        shifts[(i, j, k)]
-                        for j, _ in enumerate(days)
-                        if j < end_of_month
-                        for k, _ in enumerate(state.ShiftType)
-                    )
-                    <= 6 - math.floor(emergencies[i])
-                )
+    # # R1s do between 5.5 and 6.5 shifts after counting their emergencies shifts
+    # # unless they are in an external rotation
+    # for i, resident in enumerate(residents):
+    #     if resident.rank == "R1" and i not in external_rotations:
+    #         if int(emergencies[i]) == emergencies[i]:
+    #             model.add(
+    #                 sum(
+    #                     shifts[(i, j, k)]
+    #                     for j, _ in enumerate(days)
+    #                     if j < end_of_month
+    #                     for k, _ in enumerate(state.ShiftType)
+    #                 )
+    #                 == 6 - int(emergencies[i])
+    #             )
+    #         else:
+    #             model.add(
+    #                 sum(
+    #                     shifts[(i, j, k)]
+    #                     for j, _ in enumerate(days)
+    #                     if j < end_of_month
+    #                     for k, _ in enumerate(state.ShiftType)
+    #                 )
+    #                 >= 6 - math.ceil(emergencies[i])
+    #             )
+    #             model.add(
+    #                 sum(
+    #                     shifts[(i, j, k)]
+    #                     for j, _ in enumerate(days)
+    #                     if j < end_of_month
+    #                     for k, _ in enumerate(state.ShiftType)
+    #                 )
+    #                 <= 6 - math.floor(emergencies[i])
+    #             )
 
-    # - about the distribution of shifts -
+    # # - about the distribution of shifts -
 
     # Every resident does at least one shift of each type_
     # except R1s that do not do R and residents in external rotations
     for i, resident in enumerate(residents):
-        if i not in external_rotations:
+        if i not in external_rotations and resident.rank != "R4":
             for k, type_ in enumerate(state.ShiftType):
                 if resident.rank != "R1":
                     model.add_at_least_one(
@@ -270,7 +273,7 @@ def solve_shifts(
                     <= 2
                 )
 
-    # - about the weekend shifts -
+    # # - about the weekend shifts -
 
     # TODO: que sea todo el mundo
     # R1s and R2s work at least one weekend shift unless they are in an external rotation
@@ -284,18 +287,22 @@ def solve_shifts(
             )
 
     # Friday -> Sunday
-    # If a resident does a friday shift of a type different thank R they must do the following sunday shift
-    for i, _ in enumerate(residents):
-        for j, day in enumerate(days):
-            if day.day_of_week == "V":
-                model.add(
-                    sum(
-                        shifts[(i, j, k)]
-                        for k, type_ in enumerate(state.ShiftType)
-                        if type_ != state.ShiftType.R
+    # If a resident does a friday shift of a type different than R they must do the following sunday shift
+    for i, resident in enumerate(residents):
+        if resident.rank != "R4":
+            for j, day in enumerate(days):
+                # WARNING: this constraint is specific to this month
+                if day.day_of_week == "V" and day.number != 27:
+                    model.add(
+                        sum(
+                            shifts[(i, j, k)]
+                            for k, type_ in enumerate(state.ShiftType)
+                            if type_ != state.ShiftType.R
+                        )
+                        == sum(
+                            shifts[(i, j + 2, k)] for k, _ in enumerate(state.ShiftType)
+                        )
                     )
-                    == sum(shifts[(i, j + 2, k)] for k, _ in enumerate(state.ShiftType))
-                )
 
     # but the sunday shift must be a different type_ than the friday shift
     for i, _ in enumerate(residents):
@@ -325,36 +332,36 @@ def solve_shifts(
 
     # --- quality of life constraints ---
 
-    # no resident other than R4s can have more than 2 shifts in 6 days (triplete)
-    n = 6
-    m = 2
-    for i, resident in enumerate(residents):
-        if resident.rank != "R4":
-            for j in range(len(days) - n):
-                n_u_shifts = compute_n_u_shifts_in_window(u_positions, i, j, n)
+    # # no resident other than R4s can have more than 2 shifts in 6 days (triplete)
+    # n = 6
+    # m = 2
+    # for i, resident in enumerate(residents):
+    #     if resident.rank != "R4":
+    #         for j in range(len(days) - n):
+    #             n_u_shifts = compute_n_u_shifts_in_window(u_positions, i, j, n)
 
-                model.add(
-                    sum(
-                        shifts[(i, j + j_, k)]
-                        for k, _ in enumerate(state.ShiftType)
-                        for j_ in range(n)
-                    )
-                    <= m - n_u_shifts
-                )
+    #             model.add(
+    #                 sum(
+    #                     shifts[(i, j + j_, k)]
+    #                     for k, _ in enumerate(state.ShiftType)
+    #                     for j_ in range(n)
+    #                 )
+    #                 <= m - n_u_shifts
+    #             )
 
-    # TODO: tener en cuenta urgencias y viernes
-    # no resident other than R4s can work more than 2 weekends or holidays in a month
-    for i, resident in enumerate(residents):
-        if resident.rank != "R4":
-            model.add(
-                sum(
-                    shifts[(i, j, k)]
-                    for j, day in enumerate(days)
-                    if day.day_of_week in ["S", "D"] or j in p_days and j < end_of_month
-                    for k, _ in enumerate(state.ShiftType)
-                )
-                <= 2 - weekend_emergencies.get(i, 0)
-            )
+    # # TODO: tener en cuenta urgencias y viernes
+    # # no resident other than R4s can work more than 2 weekends or holidays in a month
+    # for i, resident in enumerate(residents):
+    #     if resident.rank != "R4":
+    #         model.add(
+    #             sum(
+    #                 shifts[(i, j, k)]
+    #                 for j, day in enumerate(days)
+    #                 if day.day_of_week in ["S", "D"] or j in p_days and j < end_of_month
+    #                 for k, _ in enumerate(state.ShiftType)
+    #             )
+    #             <= 2 - weekend_emergencies.get(i, 0)
+    #         )
 
     # no resident other than R4s can work more than 1 sunday (i.e. friday + sunday combo)
     for i, resident in enumerate(residents):
