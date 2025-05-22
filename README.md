@@ -10,3 +10,4 @@ Example input:
 ![alt text](https://github.com/chuan97/excelshifts/blob/main/input.png "Input")
 
 Example output:
+![alt text](https://github.com/chuan97/excelshifts/blob/main/output.png "Output")
