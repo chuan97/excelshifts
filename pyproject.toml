@@ -1,0 +1,24 @@
+[project]
+name = "excelshifts"
+version = "0.0.1"
+description = "CP-SAT hospital shift scheduler with excel io"
+readme = "README.md"
+requires-python = ">=3.11"
+authors =  [{name = "Juan Román Roche"}]
+dependencies = [
+    "ortools",
+    "pandas",
+    "openpyxl",
+]
+
+[tool.hatch.envs.default]
+type = "virtual"
+path = ".venv"
+dependencies = [
+    "pytest",
+    "black",
+    "ruff",
+    "mypy",
+]
+
+

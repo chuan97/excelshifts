@@ -1,5 +1,5 @@
-import excel
-from solver import solve_shifts
+import excelshifts.excel_io as excel
+from excelshifts.solver import solve_shifts
 
 f_path = "data/Guardias mayo.xlsx"
 sheet_name = "Mayo 2025"

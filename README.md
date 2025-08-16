@@ -8,7 +8,7 @@ The optimization goal is to minimize the number of days in which a particular sh
 The script outputs a copy of the input excel file with the newly assigned shifts.
 
 Example input:
-![alt text](https://github.com/chuan97/excelshifts/blob/main/input.png "Input")
+![alt text](https://github.com/chuan97/excelshifts/blob/main/images/input.png "Input")
 
 Example output:
-![alt text](https://github.com/chuan97/excelshifts/blob/main/output.png "Output")
+![alt text](https://github.com/chuan97/excelshifts/blob/main/images/output.png "Output")

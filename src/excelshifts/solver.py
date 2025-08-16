@@ -4,7 +4,7 @@ import math
 
 from ortools.sat.python import cp_model
 
-import state
+import excelshifts.state as state
 
 # TODO: dividir en dos fases, primero check de los R4, señalando normas incumplidas para poder subsanar o ignorar
 #   despues aplicar las optimización al resto de residentes.

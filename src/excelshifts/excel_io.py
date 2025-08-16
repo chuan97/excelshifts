@@ -5,7 +5,7 @@ import shutil
 import pandas as pd
 from openpyxl import load_workbook
 
-import state
+import excelshifts.state as state
 
 
 def load_residents(
