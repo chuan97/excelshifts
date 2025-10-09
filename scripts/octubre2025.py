@@ -1,13 +1,13 @@
 import excelshifts.excel_io as excel
 from excelshifts.solver import solve_shifts
 
-f_path = "data/Guardias junio.xlsx"
-sheet_name = "Mayo 2025"
+f_path = "data/Guardias octubre.xlsx"
+sheet_name = "OCTUBRE 2025"
 
 row_start = 4
 col_start = 3
-n_residents = 21
-n_days = 30
+n_residents = 22
+n_days = 33
 
 residents = excel.load_residents(f_path, sheet_name, row_start, n_residents)
 days = excel.load_days(f_path, sheet_name, col_start, n_days)
@@ -36,6 +36,9 @@ external_rotations = excel.load_external_rotations(
 preset_shifts = excel.load_preset_shifts(
     f_path, sheet_name, row_start, col_start, n_residents, n_days
 )
+
+print(residents)
+print(days)
 
 shifts_matrix = solve_shifts(
     residents,
