@@ -131,12 +131,14 @@ def cover_G_or_T_each_day(model, instance, shifts, spec):
     days = instance.days
 
     for j, _ in enumerate(days):
-        model.add_at_least_one(
+        lits = [
             shifts[(i, j, k)]
             for i, _ in enumerate(residents)
             for k, t in enumerate(state.ShiftType)
             if t.name in ["G", "T"]
-        ).only_enforce_if(enable)
+        ]
+        if lits:
+            model.add(sum(lits) >= 1).only_enforce_if(enable)
     return enable
 
 
@@ -173,10 +175,11 @@ def not_same_type_uncovered_both_weekend_days(model, instance, shifts, spec):
         if day.day_of_week == "S" and j < len(days) - 1:
             for k, t in enumerate(state.ShiftType):
                 if t.name != "R":
-                    model.add_at_least_one(
-                        [shifts[(i, j, k)] for i, _ in enumerate(residents)]
-                        + [shifts[(i, j + 1, k)] for i, _ in enumerate(residents)]
-                    ).only_enforce_if(enable)
+                    w1 = [shifts[(i, j, k)] for i, _ in enumerate(residents)]
+                    w2 = [shifts[(i, j + 1, k)] for i, _ in enumerate(residents)]
+                    lits = w1 + w2
+                    if lits:
+                        model.add(sum(lits) >= 1).only_enforce_if(enable)
     return enable
 
 
@@ -254,17 +257,21 @@ def at_least_one_of_each_type_per_resident(model, instance, shifts, spec):
         if i not in external_rotations and r.rank != "R4":
             for k, t in enumerate(state.ShiftType):
                 if r.rank != "R1":
-                    model.add_at_least_one(
+                    lits = [
                         shifts[(i, j, k)]
                         for j, _ in enumerate(days)
                         if j < end_of_month
-                    ).only_enforce_if(enable)
+                    ]
+                    if lits:
+                        model.add(sum(lits) >= 1).only_enforce_if(enable)
                 elif t != state.ShiftType.R:
-                    model.add_at_least_one(
+                    lits = [
                         shifts[(i, j, k)]
                         for j, _ in enumerate(days)
                         if j < end_of_month
-                    ).only_enforce_if(enable)
+                    ]
+                    if lits:
+                        model.add(sum(lits) >= 1).only_enforce_if(enable)
                 else:
                     for j, _ in enumerate(days):
                         model.add(shifts[(i, j, k)] == 0).only_enforce_if(enable)
@@ -305,12 +312,14 @@ def r1_r2_at_least_one_weekend(model, instance, shifts, spec):
 
     for i, r in enumerate(residents):
         if r.rank in ["R1", "R2"] and i not in external_rotations:
-            model.add_at_least_one(
+            lits = [
                 shifts[(i, j, k)]
                 for j, d in enumerate(days)
                 if d.day_of_week in ["S", "D"] and j < end_of_month
                 for k, _ in enumerate(state.ShiftType)
-            ).only_enforce_if(enable)
+            ]
+            if lits:
+                model.add(sum(lits) >= 1).only_enforce_if(enable)
     return enable
 
 
@@ -347,9 +356,10 @@ def sunday_different_type_than_friday(model, instance, shifts, spec):
         for j, day in enumerate(days):
             if day.day_of_week == "V" and j + 2 < len(days):
                 for k, _ in enumerate(state.ShiftType):
-                    model.add(shifts[(i, j + 2, k)] == 0).only_enforce_if(
-                        [enable, shifts[(i, j, k)]]
-                    )
+                    # Not the same type Friday and Sunday
+                    model.add(
+                        shifts[(i, j, k)] + shifts[(i, j + 2, k)] <= 1
+                    ).only_enforce_if(enable)
     return enable
 
 

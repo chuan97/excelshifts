@@ -9,7 +9,7 @@ Validation/diagnostics (unsat cores, cascading relax) will be added later.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from ortools.sat.cp_model_pb2 import CpSolverStatus
@@ -36,6 +36,8 @@ class AssignmentResult:
     objective: Optional[float]
     solver_status: Optional[CpSolverStatus]
     wall_time: float
+    unsat_core: Optional[List[str]] = None
+    relaxed_rules: List[str] = field(default_factory=list)
 
 
 def _extract_matrix(
@@ -171,6 +173,10 @@ def assign_instance(
             solver.parameters.random_seed = int(seed)
         solver.parameters.num_search_workers = int(num_search_workers)
 
+        assumptions = _enabled_assumptions(enables, current_enabled)
+        model.ClearAssumptions()
+        model.AddAssumptions(assumptions)
+
         status = solver.Solve(model)
 
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -181,6 +187,8 @@ def assign_instance(
                 objective=obj,
                 solver_status=status,
                 wall_time=solver.WallTime(),
+                unsat_core=first_core,
+                relaxed_rules=list(relaxed),
             )
 
         # infeasible or unknown
@@ -190,56 +198,40 @@ def assign_instance(
                 objective=None,
                 solver_status=status,
                 wall_time=solver.WallTime(),
+                unsat_core=first_core,
+                relaxed_rules=list(relaxed),
             )
 
         # Try to obtain an UNSAT core and relax one rule
-        solver_core = cp_model.CpSolver()
-        if time_limit is not None:
-            solver_core.parameters.max_time_in_seconds = float(time_limit)
-        if seed is not None:
-            solver_core.parameters.random_seed = int(seed)
-        solver_core.parameters.num_search_workers = int(num_search_workers)
-
-        assumptions = _enabled_assumptions(enables, current_enabled)
-        model.ClearAssumptions()
-        model.AddAssumptions(assumptions)
-        status_core = solver_core.Solve(model)
-
-        if status_core == cp_model.INFEASIBLE:
-            core_lits = list(solver_core.SufficientAssumptionsForInfeasibility())
-            core_rids = _core_rule_ids(core_lits, enables)
-            if first_core is None:
-                first_core = core_rids
-            # Pick the first enabled rule from the core to relax
+        # We already solved with assumptions; read the core from this solver
+        core_lits = list(solver.SufficientAssumptionsForInfeasibility())
+        core_rids = _core_rule_ids(core_lits, enables)
+        if first_core is None:
+            first_core = core_rids
+        # Pick the first enabled rule from the core to relax
+        to_disable = next(
+            (rid for rid in core_rids if current_enabled.get(rid, True)), None
+        )
+        if to_disable is None:
+            # Fallback: disable the first enabled rule we built
             to_disable = next(
-                (rid for rid in core_rids if current_enabled.get(rid, True)), None
+                (rid for rid in enables.keys() if current_enabled.get(rid, True)),
+                None,
             )
-            if to_disable is None:
-                # Fallback: disable the first enabled rule we built
-                to_disable = next(
-                    (rid for rid in enables.keys() if current_enabled.get(rid, True)),
-                    None,
-                )
-            if to_disable is None:
-                # Nothing to relax
-                return AssignmentResult(
-                    matrix=None,
-                    objective=None,
-                    solver_status=status,
-                    wall_time=solver.WallTime(),
-                )
-            current_enabled[to_disable] = False
-            relaxed.append(to_disable)
-            # loop and try again
-            continue
-        else:
-            # Could not get a core; stop
+        if to_disable is None:
+            # Nothing to relax
             return AssignmentResult(
                 matrix=None,
                 objective=None,
                 solver_status=status,
                 wall_time=solver.WallTime(),
+                unsat_core=first_core,
+                relaxed_rules=list(relaxed),
             )
+        current_enabled[to_disable] = False
+        relaxed.append(to_disable)
+        # loop and try again
+        continue
 
     # Should not reach here
     return AssignmentResult(
@@ -247,6 +239,8 @@ def assign_instance(
         objective=None,
         solver_status=None,
         wall_time=0.0,
+        unsat_core=first_core,
+        relaxed_rules=list(relaxed),
     )
 
 
