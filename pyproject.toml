@@ -9,6 +9,7 @@ dependencies = [
     "ortools",
     "pandas",
     "openpyxl",
+    "pyyaml",
 ]
 
 [tool.hatch.envs.default]
@@ -19,6 +20,9 @@ dependencies = [
     "black",
     "ruff",
     "mypy",
+    "types-pyyaml",
+    "pandas-stubs",
+    "types-openpyxl",
 ]
 
 

@@ -10,7 +10,7 @@ import excelshifts.state as state
 
 def load_residents(
     file_path: str, sheet_name: str, start: int, n_residents: int
-) -> list[state.Resident]:
+) -> tuple[state.Resident, ...]:
     """loads resident names & ranks from columns A & B.
 
     args:
@@ -20,7 +20,7 @@ def load_residents(
         n_residents: The number of residents to load
 
     returns:
-        A list of Resident objects
+        A tuple of Resident objects
     """
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
@@ -28,19 +28,18 @@ def load_residents(
     ROW_BOUNDS = (start - 1, start + n_residents - 2)
 
     residents = []
-    for i, row in df.iterrows():
-        if is_rowcol_in_bounds(i, ROW_BOUNDS):
+    for row_pos in range(df.shape[0]):
+        row = df.iloc[row_pos]
+        if is_rowcol_in_bounds(row_pos, ROW_BOUNDS):
             if pd.notna(row[0]):
                 lastrank = row[0]
-
             residents.append(state.Resident(row[1], lastrank))
-
-    return residents
+    return tuple(residents)
 
 
 def load_days(
     file_path: str, sheet_name: str, start: int, n_days: int
-) -> list[state.Day]:
+) -> tuple[state.Day, ...]:
     """loads day numbers and weekdays from rows 2 & 3.
 
     args:
@@ -50,7 +49,7 @@ def load_days(
         n_days: The number of days to load
 
     returns:
-        A list of Day objects
+        A tuple of Day objects
     """
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
@@ -64,7 +63,7 @@ def load_days(
         state.Day(number, weekday) for number, weekday in zip(day_numbers, weekdays)
     ]
 
-    return days
+    return tuple(days)
 
 
 def load_restrictions(
@@ -75,7 +74,7 @@ def load_restrictions(
     col_start: int,
     n_residents: int,
     n_days: int,
-) -> list[tuple[int, int]]:
+) -> tuple[tuple[int, int], ...]:
     """loads restrictions from the Excel file.
 
     args:
@@ -88,7 +87,7 @@ def load_restrictions(
         n_days: The number of days
 
     returns:
-        A list of restricted (resident_index, day_index) tuples with the restrictions
+        A tuple of restricted (resident_index, day_index) tuples with the restrictions
     """
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
@@ -100,13 +99,12 @@ def load_restrictions(
     COL_BOUNDS = (COL_OFFSET, n_days + COL_OFFSET - 1)
 
     positions = [
-        (row_idx - ROW_OFFSET, col_idx - COL_OFFSET)
-        for row_idx, row in df.iterrows()
-        for col_idx, cell in enumerate(row)
-        if is_cell_in_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS) and cell in types
+        (row_pos - ROW_OFFSET, col_pos - COL_OFFSET)
+        for row_pos in range(df.shape[0])
+        for col_pos, cell in enumerate(df.iloc[row_pos])
+        if is_cell_in_bounds(row_pos, col_pos, ROW_BOUNDS, COL_BOUNDS) and cell in types
     ]
-
-    return positions
+    return tuple(positions)
 
 
 def load_external_rotations(
@@ -116,7 +114,7 @@ def load_external_rotations(
     col_start: int,
     n_residents: int,
     n_days: int,
-):
+) -> frozenset[int]:
     """loads external rotations from the Excel file.
 
     args:
@@ -128,14 +126,14 @@ def load_external_rotations(
         n_days: The number of days
 
     returns:
-        A list of residents who are in external rotations
+        A frozenset of residents who are in external rotations
     """
 
     e_positions = load_restrictions(
         file_path, sheet_name, ["E"], row_start, col_start, n_residents, n_days
     )
 
-    return set(i for i, _ in e_positions)
+    return frozenset(i for i, _ in e_positions)
 
 
 def load_preset_shifts(
@@ -145,7 +143,7 @@ def load_preset_shifts(
     col_start: int,
     n_residents: int,
     n_days: int,
-) -> list[tuple[int, int, int]]:
+) -> tuple[tuple[int, int, int], ...]:
     """loads preset shifts from the Excel file.
 
     args:
@@ -157,7 +155,7 @@ def load_preset_shifts(
         n_days: The number of days
 
     returns:
-        A list of (resident_index, day_index, shift_index) tuples with the preset shifts
+        A tuple of (resident_index, day_index, shift_index) tuples with the preset shifts
     """
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="openpyxl")
@@ -169,14 +167,13 @@ def load_preset_shifts(
     COL_BOUNDS = (COL_OFFSET, n_days + COL_OFFSET - 1)
 
     positions = [
-        (row_idx - ROW_OFFSET, col_idx - COL_OFFSET, state.ShiftType[cell].value - 1)
-        for row_idx, row in df.iterrows()
-        for col_idx, cell in enumerate(row)
-        if is_cell_in_bounds(row_idx, col_idx, ROW_BOUNDS, COL_BOUNDS)
+        (row_pos - ROW_OFFSET, col_pos - COL_OFFSET, state.ShiftType[cell].value)
+        for row_pos in range(df.shape[0])
+        for col_pos, cell in enumerate(df.iloc[row_pos])
+        if is_cell_in_bounds(row_pos, col_pos, ROW_BOUNDS, COL_BOUNDS)
         and cell in list(state.ShiftType.__members__)
     ]
-
-    return positions
+    return tuple(positions)
 
 
 def is_cell_in_bounds(
@@ -233,15 +230,14 @@ def load_totals(
     COL_BOUNDS = (col_start - 1, col_start + len(state.ShiftType) - 2)
 
     totals = []
-    for row_idx, row in df.iterrows():
-        if is_rowcol_in_bounds(row_idx, ROW_BOUNDS):
+    for row_pos in range(df.shape[0]):
+        row = df.iloc[row_pos]
+        if is_rowcol_in_bounds(row_pos, ROW_BOUNDS):
             shifts = []
             for col_idx, cell in enumerate(row):
                 if is_rowcol_in_bounds(col_idx, COL_BOUNDS):
                     shifts.append(cell)
-
             totals.append(shifts)
-
     return totals
 
 
@@ -300,8 +296,88 @@ def save_shifts(
                     row=i + ROW_OFFSET + 1, column=j + COL_OFFSET + 1, value=shift
                 )
 
-        wb.save(file_path)
+    wb.save(file_path)
 
 
 # TODO: Add function to load totals of Sabados and Viernes-Domingos
 # TODO: Add function to save updated totals
+
+
+# Helper to load a complete Instance from Excel using the above loaders
+def load_instance(
+    file_path: str,
+    sheet_name: str,
+    *,
+    residents_start: int,
+    n_residents: int,
+    days_start: int,
+    n_days: int,
+    grid_row_start: int,
+    grid_col_start: int,
+) -> state.Instance:
+    """Load a complete Instance from a single Excel sheet.
+
+    Parameters
+    ----------
+    residents_start: first row of the residents block (names & ranks in cols A/B)
+    days_start: first column of the days block (day numbers / weekdays)
+    grid_row_start, grid_col_start: top-left of the assignment grid (restrictions/presets)
+    n_residents, n_days: sizes of the grid
+    """
+    residents = load_residents(file_path, sheet_name, residents_start, n_residents)
+    days = load_days(file_path, sheet_name, days_start, n_days)
+
+    # Restrictions & presets within the grid
+    v_positions = load_restrictions(
+        file_path,
+        sheet_name,
+        ["V"],
+        grid_row_start,
+        grid_col_start,
+        n_residents,
+        n_days,
+    )
+    u_positions = load_restrictions(
+        file_path,
+        sheet_name,
+        ["U"],
+        grid_row_start,
+        grid_col_start,
+        n_residents,
+        n_days,
+    )
+    ut_positions = load_restrictions(
+        file_path,
+        sheet_name,
+        ["UT"],
+        grid_row_start,
+        grid_col_start,
+        n_residents,
+        n_days,
+    )
+    p_positions = load_restrictions(
+        file_path,
+        sheet_name,
+        ["P"],
+        grid_row_start,
+        grid_col_start,
+        n_residents,
+        n_days,
+    )
+    external_rotations = load_external_rotations(
+        file_path, sheet_name, grid_row_start, grid_col_start, n_residents, n_days
+    )
+    presets = load_preset_shifts(
+        file_path, sheet_name, grid_row_start, grid_col_start, n_residents, n_days
+    )
+
+    return state.Instance(
+        residents=residents,
+        days=days,
+        v_positions=v_positions,
+        u_positions=u_positions,
+        ut_positions=ut_positions,
+        p_positions=p_positions,
+        external_rotations=external_rotations,
+        presets=presets,
+    )

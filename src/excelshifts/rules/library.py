@@ -1,25 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
-
 import excelshifts.state as state
-
-
-# Helper to access variables as dict or object
-def _get(v: Any, name: str) -> Any:
-    return v[name] if isinstance(v, dict) else getattr(v, name)
-
 
 # ---------- Basic (physical) constraints ----------
 
 
-def one_shift_per_day(model, variables, policy, spec):
+def one_shift_per_day(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
+    residents = instance.residents
+    days = instance.days
 
     for i, _ in enumerate(residents):
         for j, _ in enumerate(days):
@@ -29,12 +19,10 @@ def one_shift_per_day(model, variables, policy, spec):
     return enable
 
 
-def restricted_day_off(model, variables, policy, spec):
+def restricted_day_off(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    v_positions = _get(variables, "v_positions")
+    v_positions = instance.v_positions
 
     for i, j in v_positions:
         for k, _ in enumerate(state.ShiftType):
@@ -42,14 +30,12 @@ def restricted_day_off(model, variables, policy, spec):
     return enable
 
 
-def no_R_on_weekends_or_holidays(model, variables, policy, spec):
+def no_R_on_weekends_or_holidays(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    p_days = _get(variables, "p_days")
+    residents = instance.residents
+    days = instance.days
+    p_days = instance.p_days
 
     for i, _ in enumerate(residents):
         for j, day in enumerate(days):
@@ -60,32 +46,29 @@ def no_R_on_weekends_or_holidays(model, variables, policy, spec):
     return enable
 
 
-def rest_after_any_shift(model, variables, policy, spec):
+def rest_after_any_shift(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
+    residents = instance.residents
+    days = instance.days
 
     for i, _ in enumerate(residents):
+        # (works day j) + (works day j+1) <= 1
         for j, _ in enumerate(days):
             if j < len(days) - 1:
-                for k, _ in enumerate(state.ShiftType):
-                    for p, _ in enumerate(state.ShiftType):
-                        model.add(shifts[(i, j + 1, p)] == 0).only_enforce_if(
-                            [enable, shifts[(i, j, k)]]
-                        )
+                model.add(
+                    sum(shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType))
+                    + sum(shifts[(i, j + 1, k)] for k, _ in enumerate(state.ShiftType))
+                    <= 1
+                ).only_enforce_if(enable)
     return enable
 
 
-def block_around_emergency_u(model, variables, policy, spec):
+def block_around_emergency_u(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    u_positions = _get(variables, "u_positions")
-    days = _get(variables, "days")
+    u_positions = instance.u_positions
+    days = instance.days
 
     for i, j in u_positions:
         for k, _ in enumerate(state.ShiftType):
@@ -96,12 +79,10 @@ def block_around_emergency_u(model, variables, policy, spec):
     return enable
 
 
-def block_around_emergency_ut(model, variables, policy, spec):
+def block_around_emergency_ut(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    ut_positions = _get(variables, "ut_positions")
+    ut_positions = instance.ut_positions
 
     for i, j in ut_positions:
         for k, _ in enumerate(state.ShiftType):
@@ -111,14 +92,12 @@ def block_around_emergency_ut(model, variables, policy, spec):
     return enable
 
 
-def external_rotation_off(model, variables, policy, spec):
+def external_rotation_off(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    external_rotations = _get(variables, "external_rotations")
-    days = _get(variables, "days")
+    residents = instance.residents
+    external_rotations = instance.external_rotations
+    days = instance.days
 
     for i, _ in enumerate(residents):
         if i in external_rotations:
@@ -131,13 +110,11 @@ def external_rotation_off(model, variables, policy, spec):
 # ---------- Coverage constraints ----------
 
 
-def at_most_one_resident_per_shift_per_day(model, variables, policy, spec):
+def at_most_one_resident_per_shift_per_day(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
+    residents = instance.residents
+    days = instance.days
 
     for j, _ in enumerate(days):
         for k, _ in enumerate(state.ShiftType):
@@ -147,13 +124,11 @@ def at_most_one_resident_per_shift_per_day(model, variables, policy, spec):
     return enable
 
 
-def cover_G_or_T_each_day(model, variables, policy, spec):
+def cover_G_or_T_each_day(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
+    residents = instance.residents
+    days = instance.days
 
     for j, _ in enumerate(days):
         model.add_at_least_one(
@@ -165,17 +140,15 @@ def cover_G_or_T_each_day(model, variables, policy, spec):
     return enable
 
 
-def min_assignments_per_day(model, variables, policy, spec):
+def min_assignments_per_day(model, instance, shifts, spec):
     """Implements: 'At most two types of shift can be uncovered each day' using the
     original inequality present in solver.py.
     """
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    p_days = _get(variables, "p_days")
+    residents = instance.residents
+    days = instance.days
+    p_days = instance.p_days
 
     for j, day in enumerate(days):
         rhs = 1 if (day.day_of_week in ["V", "S", "D"] or j in p_days) else 2
@@ -190,13 +163,11 @@ def min_assignments_per_day(model, variables, policy, spec):
     return enable
 
 
-def not_same_type_uncovered_both_weekend_days(model, variables, policy, spec):
+def not_same_type_uncovered_both_weekend_days(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
+    residents = instance.residents
+    days = instance.days
 
     for j, day in enumerate(days):
         if day.day_of_week == "S" and j < len(days) - 1:
@@ -212,14 +183,12 @@ def not_same_type_uncovered_both_weekend_days(model, variables, policy, spec):
 # ---------- Number-of-shifts constraints ----------
 
 
-def enforce_presets_and_R4_only_presets(model, variables, policy, spec):
+def enforce_presets_and_R4_only_presets(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    presets = _get(variables, "presets")
+    residents = instance.residents
+    days = instance.days
+    presets = instance.presets
 
     for i, r in enumerate(residents):
         for j, _ in enumerate(days):
@@ -231,12 +200,10 @@ def enforce_presets_and_R4_only_presets(model, variables, policy, spec):
     return enable
 
 
-def holiday_assigned_must_work(model, variables, policy, spec):
+def holiday_assigned_must_work(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    p_positions = _get(variables, "p_positions")
+    p_positions = instance.p_positions
 
     for i, j in p_positions:
         model.add(
@@ -245,18 +212,21 @@ def holiday_assigned_must_work(model, variables, policy, spec):
     return enable
 
 
-def r3_exactly_six(model, variables, policy, spec):
+def r1_r2_r3_exactly_six_minus_emergencies(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    end_of_month = _get(variables, "end_of_month")
-    external_rotations = _get(variables, "external_rotations")
+    residents = instance.residents
+    days = instance.days
+    end_of_month = instance.end_of_month
+    external_rotations = instance.external_rotations
+    u_positions = instance.u_positions
+    ut_positions = instance.ut_positions
 
     for i, r in enumerate(residents):
-        if r.rank == "R3" and i not in external_rotations:
+        if r.rank in ["R1", "R2", "R3"] and i not in external_rotations:
+            u_count = sum(1 for (ri, _) in u_positions if ri == i)
+            ut_pairs = (sum(1 for (ri, _) in ut_positions if ri == i)) // 2
+            target = 6 - u_count - ut_pairs
             model.add(
                 sum(
                     shifts[(i, j, k)]
@@ -264,32 +234,7 @@ def r3_exactly_six(model, variables, policy, spec):
                     if j < end_of_month
                     for k, _ in enumerate(state.ShiftType)
                 )
-                == 6
-            ).only_enforce_if(enable)
-    return enable
-
-
-def r2_exactly_six_minus_emergencies(model, variables, policy, spec):
-    enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
-
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    end_of_month = _get(variables, "end_of_month")
-    external_rotations = _get(variables, "external_rotations")
-    emergencies = _get(variables, "emergencies")
-
-    for i, r in enumerate(residents):
-        if r.rank == "R2" and i not in external_rotations:
-            model.add(
-                sum(
-                    shifts[(i, j, k)]
-                    for j, _ in enumerate(days)
-                    if j < end_of_month
-                    for k, _ in enumerate(state.ShiftType)
-                )
-                == 6 - int(emergencies[i])
+                == target
             ).only_enforce_if(enable)
     return enable
 
@@ -297,15 +242,13 @@ def r2_exactly_six_minus_emergencies(model, variables, policy, spec):
 # ---------- Distribution constraints ----------
 
 
-def at_least_one_of_each_type_per_resident(model, variables, policy, spec):
+def at_least_one_of_each_type_per_resident(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    end_of_month = _get(variables, "end_of_month")
-    external_rotations = _get(variables, "external_rotations")
+    residents = instance.residents
+    days = instance.days
+    end_of_month = instance.end_of_month
+    external_rotations = instance.external_rotations
 
     for i, r in enumerate(residents):
         if i not in external_rotations and r.rank != "R4":
@@ -328,14 +271,12 @@ def at_least_one_of_each_type_per_resident(model, variables, policy, spec):
     return enable
 
 
-def non_r4_max_two_per_type(model, variables, policy, spec):
+def non_r4_max_two_per_type(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    end_of_month = _get(variables, "end_of_month")
+    residents = instance.residents
+    days = instance.days
+    end_of_month = instance.end_of_month
 
     for i, r in enumerate(residents):
         if r.rank != "R4":
@@ -354,15 +295,13 @@ def non_r4_max_two_per_type(model, variables, policy, spec):
 # ---------- Weekend constraints ----------
 
 
-def r1_r2_at_least_one_weekend(model, variables, policy, spec):
+def r1_r2_at_least_one_weekend(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    end_of_month = _get(variables, "end_of_month")
-    external_rotations = _get(variables, "external_rotations")
+    residents = instance.residents
+    days = instance.days
+    end_of_month = instance.end_of_month
+    external_rotations = instance.external_rotations
 
     for i, r in enumerate(residents):
         if r.rank in ["R1", "R2"] and i not in external_rotations:
@@ -375,13 +314,11 @@ def r1_r2_at_least_one_weekend(model, variables, policy, spec):
     return enable
 
 
-def friday_requires_sunday(model, variables, policy, spec):
+def friday_requires_sunday(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
+    residents = instance.residents
+    days = instance.days
 
     for i, r in enumerate(residents):
         if r.rank != "R4":
@@ -400,13 +337,11 @@ def friday_requires_sunday(model, variables, policy, spec):
     return enable
 
 
-def sunday_different_type_than_friday(model, variables, policy, spec):
+def sunday_different_type_than_friday(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
+    residents = instance.residents
+    days = instance.days
 
     for i, _ in enumerate(residents):
         for j, day in enumerate(days):
@@ -418,13 +353,31 @@ def sunday_different_type_than_friday(model, variables, policy, spec):
     return enable
 
 
-def block_monday_after_sat_emergency(model, variables, policy, spec):
+def block_monday_after_saturday_shift_non_r4(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    u_positions = _get(variables, "u_positions")
-    days = _get(variables, "days")
+    residents = instance.residents
+    days = instance.days
+
+    for i, r in enumerate(residents):
+        if r.rank != "R4":
+            for j, day in enumerate(days):
+                if day.day_of_week == "S" and j + 2 < len(days):
+                    model.add(
+                        sum(shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType))
+                        + sum(
+                            shifts[(i, j + 2, k)] for k, _ in enumerate(state.ShiftType)
+                        )
+                        <= 1
+                    ).only_enforce_if(enable)
+    return enable
+
+
+def block_monday_after_sat_emergency(model, instance, shifts, spec):
+    enable = model.NewBoolVar(f"enable_{spec.id}")
+
+    u_positions = instance.u_positions
+    days = instance.days
 
     for i, j in u_positions:
         if days[j].day_of_week == "S" and j < len(days) - 2:
@@ -433,14 +386,12 @@ def block_monday_after_sat_emergency(model, variables, policy, spec):
     return enable
 
 
-def non_r4_max_one_sunday(model, variables, policy, spec):
+def non_r4_max_one_sunday(model, instance, shifts, spec):
     enable = model.NewBoolVar(f"enable_{spec.id}")
-    model.add(enable == 1)
 
-    shifts = _get(variables, "shifts")
-    residents = _get(variables, "residents")
-    days = _get(variables, "days")
-    end_of_month = _get(variables, "end_of_month")
+    residents = instance.residents
+    days = instance.days
+    end_of_month = instance.end_of_month
 
     for i, r in enumerate(residents):
         if r.rank != "R4":

@@ -10,9 +10,9 @@ Minimal rule contracts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, TypeAlias
+from typing import Any, Mapping
 
-__all__ = ["RuleSpec", "BuilderFn"]
+__all__ = ["RuleSpec"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +24,7 @@ class RuleSpec:
     ----------
     id:         Stable identifier (e.g., "no_R_on_fridays").
     enabled:    Whether this rule is active for this run.
+    priority:   Integer priority (0 by default). Higher means more relaxable.
     params:     Free-form parameters consumed by the concrete rule builder.
     description:Optional human-readable text for reports (can be empty).
     """
@@ -32,8 +33,3 @@ class RuleSpec:
     enabled: bool = True
     params: Mapping[str, Any] = field(default_factory=dict)
     description: str = ""
-
-
-# A rule builder adds constraints/vars to the model and returns the rule's enable literal.
-EnableVarT: TypeAlias = Any
-BuilderFn = Callable[[Any, Any, Any, RuleSpec], EnableVarT]

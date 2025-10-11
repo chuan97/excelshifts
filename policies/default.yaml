@@ -1,0 +1,29 @@
+rules:
+  one_shift_per_day: true
+  restricted_day_off: true
+  no_R_on_weekends_or_holidays: true
+  rest_after_any_shift: true
+  block_around_emergency_u: true
+  block_around_emergency_ut: true
+  external_rotation_off: true
+
+  at_most_one_resident_per_shift_per_day: true
+  cover_G_or_T_each_day: true
+  min_assignments_per_day: true
+  not_same_type_uncovered_both_weekend_days: true
+
+  enforce_presets_and_R4_only_presets: true
+  holiday_assigned_must_work: true
+  r1_r2_r3_exactly_six_minus_emergencies: true
+
+  at_least_one_of_each_type_per_resident: true
+  non_r4_max_two_per_type: true
+
+  r1_r2_at_least_one_weekend: true
+  friday_requires_sunday: true
+  sunday_different_type_than_friday: true
+  block_monday_after_saturday_shift_non_r4: true
+  block_monday_after_sat_emergency: true
+  non_r4_max_one_sunday: true
+
+  no_R_on_fridays_unless_others_covered: true

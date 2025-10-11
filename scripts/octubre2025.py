@@ -1,56 +1,58 @@
-import excelshifts.excel_io as excel
-from excelshifts.solver import solve_shifts
+from __future__ import annotations
 
-f_path = "data/Guardias octubre.xlsx"
-sheet_name = "OCTUBRE 2025"
+from typing import Literal
 
-row_start = 4
-col_start = 3
-n_residents = 22
-n_days = 33
+from excelshifts.pipeline import assign_excel
 
-residents = excel.load_residents(f_path, sheet_name, row_start, n_residents)
-days = excel.load_days(f_path, sheet_name, col_start, n_days)
-v_positions = excel.load_restrictions(
-    f_path,
-    sheet_name,
-    ["V", "B", "Mo", "Cu", "Co", "Con"],
-    row_start,
-    col_start,
-    n_residents,
-    n_days,
-)
-u_positions = excel.load_restrictions(
-    f_path, sheet_name, ["U"], row_start, col_start, n_residents, n_days
-)
-ut_positions = excel.load_restrictions(
-    f_path, sheet_name, ["UT"], row_start, col_start, n_residents, n_days
-)
-p_positions = excel.load_restrictions(
-    f_path, sheet_name, ["P"], row_start, col_start, n_residents, n_days
-)
-external_rotations = excel.load_external_rotations(
-    f_path, sheet_name, row_start, col_start, n_residents, n_days
-)
-# totals = excel.load_totals(f_path, "Hasta diciembre", 3, 2, n_residents)
-preset_shifts = excel.load_preset_shifts(
-    f_path, sheet_name, row_start, col_start, n_residents, n_days
-)
+RelaxMode = Literal["none", "auto"]
 
-print(residents)
-print(days)
+# --- Month-specific configuration ---
+INPUT_PATH = "data/Guardias octubre.xlsx"
+SHEET_NAME = "OCTUBRE 2025"
 
-shifts_matrix = solve_shifts(
-    residents,
-    days,
-    v_positions,
-    u_positions,
-    ut_positions,
-    p_positions,
-    external_rotations,
-    preset_shifts,
-    # totals,
-)
-print(shifts_matrix)
-f_path_out = excel.copy_excel_file(f_path, "_solved")
-excel.save_shifts(f_path_out, sheet_name, shifts_matrix, row_start, col_start)
+# Coordinates (0-based)
+RESIDENTS_START = 4
+N_RESIDENTS = 22
+DAYS_START = 3
+N_DAYS = 33
+GRID_ROW_START = 4
+GRID_COL_START = 3
+
+# Policy & solver knobs
+POLICY_PATH = "policies/default.yaml"  # adjust if needed
+TIME_LIMIT = None  # e.g., 60.0
+SEED = None  # e.g., 123
+WORKERS = 1  # keep 1 for determinism
+RELAX: RelaxMode = "auto"  # "none" or "auto"
+RELAX_LIMIT = 2  # max number of rules to relax when RELAX=="auto"
+SAVE = True  # write to a copy: *_solved.xlsx
+
+
+def main() -> int:
+    res = assign_excel(
+        input_path=INPUT_PATH,
+        sheet_name=SHEET_NAME,
+        residents_start=RESIDENTS_START,
+        n_residents=N_RESIDENTS,
+        days_start=DAYS_START,
+        n_days=N_DAYS,
+        grid_row_start=GRID_ROW_START,
+        grid_col_start=GRID_COL_START,
+        policy_path=POLICY_PATH,
+        time_limit=TIME_LIMIT,
+        seed=SEED,
+        num_search_workers=WORKERS,
+        relax=RELAX,
+        relax_limit=RELAX_LIMIT,
+        save=SAVE,
+    )
+
+    print(
+        f"status={res.solver_status} objective={res.objective} time={res.wall_time:.3f}s"
+    )
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
