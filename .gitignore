@@ -4,3 +4,5 @@ data/
 .venv
 src/*.egg-info/
 .mypy_cache/
+policies/*
+!policies/default.yaml
