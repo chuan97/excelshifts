@@ -13,9 +13,9 @@ def one_shift_per_day(model, instance, shifts, spec):
 
     for i, _ in enumerate(residents):
         for j, _ in enumerate(days):
-            model.add_at_most_one(
-                shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType)
-            ).only_enforce_if(enable)
+            lits = [shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType)]
+            if lits:
+                model.Add(sum(lits) <= 1).OnlyEnforceIf(enable)
     return enable
 
 
@@ -26,7 +26,7 @@ def restricted_day_off(model, instance, shifts, spec):
 
     for i, j in v_positions:
         for k, _ in enumerate(state.ShiftType):
-            model.add(shifts[(i, j, k)] == 0).only_enforce_if(enable)
+            model.Add(shifts[(i, j, k)] == 0).OnlyEnforceIf(enable)
     return enable
 
 
@@ -42,7 +42,7 @@ def no_R_on_weekends_or_holidays(model, instance, shifts, spec):
             if day.day_of_week in ["S", "D"] or j in p_days:
                 for k, t in enumerate(state.ShiftType):
                     if t == state.ShiftType.R:
-                        model.add(shifts[(i, j, k)] == 0).only_enforce_if(enable)
+                        model.Add(shifts[(i, j, k)] == 0).OnlyEnforceIf(enable)
     return enable
 
 
@@ -56,11 +56,11 @@ def rest_after_any_shift(model, instance, shifts, spec):
         # (works day j) + (works day j+1) <= 1
         for j, _ in enumerate(days):
             if j < len(days) - 1:
-                model.add(
+                model.Add(
                     sum(shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType))
                     + sum(shifts[(i, j + 1, k)] for k, _ in enumerate(state.ShiftType))
                     <= 1
-                ).only_enforce_if(enable)
+                ).OnlyEnforceIf(enable)
     return enable
 
 
@@ -72,10 +72,10 @@ def block_around_emergency_u(model, instance, shifts, spec):
 
     for i, j in u_positions:
         for k, _ in enumerate(state.ShiftType):
-            model.add(shifts[(i, j, k)] == 0).only_enforce_if(enable)
+            model.Add(shifts[(i, j, k)] == 0).OnlyEnforceIf(enable)
             if 0 < j < len(days) - 1:
-                model.add(shifts[(i, j + 1, k)] == 0).only_enforce_if(enable)
-                model.add(shifts[(i, j - 1, k)] == 0).only_enforce_if(enable)
+                model.Add(shifts[(i, j + 1, k)] == 0).OnlyEnforceIf(enable)
+                model.Add(shifts[(i, j - 1, k)] == 0).OnlyEnforceIf(enable)
     return enable
 
 
@@ -86,9 +86,9 @@ def block_around_emergency_ut(model, instance, shifts, spec):
 
     for i, j in ut_positions:
         for k, _ in enumerate(state.ShiftType):
-            model.add(shifts[(i, j, k)] == 0).only_enforce_if(enable)
+            model.Add(shifts[(i, j, k)] == 0).OnlyEnforceIf(enable)
             if j > 0:
-                model.add(shifts[(i, j - 1, k)] == 0).only_enforce_if(enable)
+                model.Add(shifts[(i, j - 1, k)] == 0).OnlyEnforceIf(enable)
     return enable
 
 
@@ -103,7 +103,7 @@ def external_rotation_off(model, instance, shifts, spec):
         if i in external_rotations:
             for j, _ in enumerate(days):
                 for k, _ in enumerate(state.ShiftType):
-                    model.add(shifts[(i, j, k)] == 0).only_enforce_if(enable)
+                    model.Add(shifts[(i, j, k)] == 0).OnlyEnforceIf(enable)
     return enable
 
 
@@ -118,9 +118,9 @@ def at_most_one_resident_per_shift_per_day(model, instance, shifts, spec):
 
     for j, _ in enumerate(days):
         for k, _ in enumerate(state.ShiftType):
-            model.add_at_most_one(
-                shifts[(i, j, k)] for i, _ in enumerate(residents)
-            ).only_enforce_if(enable)
+            lits = [shifts[(i, j, k)] for i, _ in enumerate(residents)]
+            if lits:
+                model.Add(sum(lits) <= 1).OnlyEnforceIf(enable)
     return enable
 
 
@@ -138,7 +138,7 @@ def cover_G_or_T_each_day(model, instance, shifts, spec):
             if t.name in ["G", "T"]
         ]
         if lits:
-            model.add(sum(lits) >= 1).only_enforce_if(enable)
+            model.Add(sum(lits) >= 1).OnlyEnforceIf(enable)
     return enable
 
 
@@ -154,14 +154,14 @@ def min_assignments_per_day(model, instance, shifts, spec):
 
     for j, day in enumerate(days):
         rhs = 1 if (day.day_of_week in ["V", "S", "D"] or j in p_days) else 2
-        model.add(
+        model.Add(
             sum(
                 shifts[(i, j, k)]
                 for i, _ in enumerate(residents)
                 for k, _ in enumerate(state.ShiftType)
             )
             > rhs
-        ).only_enforce_if(enable)
+        ).OnlyEnforceIf(enable)
     return enable
 
 
@@ -179,7 +179,7 @@ def not_same_type_uncovered_both_weekend_days(model, instance, shifts, spec):
                     w2 = [shifts[(i, j + 1, k)] for i, _ in enumerate(residents)]
                     lits = w1 + w2
                     if lits:
-                        model.add(sum(lits) >= 1).only_enforce_if(enable)
+                        model.Add(sum(lits) >= 1).OnlyEnforceIf(enable)
     return enable
 
 
@@ -197,9 +197,9 @@ def enforce_presets_and_R4_only_presets(model, instance, shifts, spec):
         for j, _ in enumerate(days):
             for k, _ in enumerate(state.ShiftType):
                 if (i, j, k) in presets:
-                    model.add(shifts[(i, j, k)] == 1).only_enforce_if(enable)
+                    model.Add(shifts[(i, j, k)] == 1).OnlyEnforceIf(enable)
                 elif r.rank == "R4":
-                    model.add(shifts[(i, j, k)] == 0).only_enforce_if(enable)
+                    model.Add(shifts[(i, j, k)] == 0).OnlyEnforceIf(enable)
     return enable
 
 
@@ -209,9 +209,9 @@ def holiday_assigned_must_work(model, instance, shifts, spec):
     p_positions = instance.p_positions
 
     for i, j in p_positions:
-        model.add(
+        model.Add(
             sum(shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType)) == 1
-        ).only_enforce_if(enable)
+        ).OnlyEnforceIf(enable)
     return enable
 
 
@@ -230,7 +230,7 @@ def r1_r2_r3_exactly_six_minus_emergencies(model, instance, shifts, spec):
             u_count = sum(1 for (ri, _) in u_positions if ri == i)
             ut_pairs = (sum(1 for (ri, _) in ut_positions if ri == i)) // 2
             target = 6 - u_count - ut_pairs
-            model.add(
+            model.Add(
                 sum(
                     shifts[(i, j, k)]
                     for j, _ in enumerate(days)
@@ -238,7 +238,7 @@ def r1_r2_r3_exactly_six_minus_emergencies(model, instance, shifts, spec):
                     for k, _ in enumerate(state.ShiftType)
                 )
                 == target
-            ).only_enforce_if(enable)
+            ).OnlyEnforceIf(enable)
     return enable
 
 
@@ -263,7 +263,7 @@ def at_least_one_of_each_type_per_resident(model, instance, shifts, spec):
                         if j < end_of_month
                     ]
                     if lits:
-                        model.add(sum(lits) >= 1).only_enforce_if(enable)
+                        model.Add(sum(lits) >= 1).OnlyEnforceIf(enable)
                 elif t != state.ShiftType.R:
                     lits = [
                         shifts[(i, j, k)]
@@ -271,10 +271,10 @@ def at_least_one_of_each_type_per_resident(model, instance, shifts, spec):
                         if j < end_of_month
                     ]
                     if lits:
-                        model.add(sum(lits) >= 1).only_enforce_if(enable)
+                        model.Add(sum(lits) >= 1).OnlyEnforceIf(enable)
                 else:
                     for j, _ in enumerate(days):
-                        model.add(shifts[(i, j, k)] == 0).only_enforce_if(enable)
+                        model.Add(shifts[(i, j, k)] == 0).OnlyEnforceIf(enable)
     return enable
 
 
@@ -288,14 +288,14 @@ def non_r4_max_two_per_type(model, instance, shifts, spec):
     for i, r in enumerate(residents):
         if r.rank != "R4":
             for k, _ in enumerate(state.ShiftType):
-                model.add(
+                model.Add(
                     sum(
                         shifts[(i, j, k)]
                         for j, _ in enumerate(days)
                         if j < end_of_month
                     )
                     <= 2
-                ).only_enforce_if(enable)
+                ).OnlyEnforceIf(enable)
     return enable
 
 
@@ -319,7 +319,7 @@ def r1_r2_at_least_one_weekend(model, instance, shifts, spec):
                 for k, _ in enumerate(state.ShiftType)
             ]
             if lits:
-                model.add(sum(lits) >= 1).only_enforce_if(enable)
+                model.Add(sum(lits) >= 1).OnlyEnforceIf(enable)
     return enable
 
 
@@ -333,7 +333,7 @@ def friday_requires_sunday(model, instance, shifts, spec):
         if r.rank != "R4":
             for j, day in enumerate(days):
                 if day.day_of_week == "V" and j + 2 < len(days):
-                    model.add(
+                    model.Add(
                         sum(
                             shifts[(i, j, k)]
                             for k, t in enumerate(state.ShiftType)
@@ -342,7 +342,7 @@ def friday_requires_sunday(model, instance, shifts, spec):
                         == sum(
                             shifts[(i, j + 2, k)] for k, _ in enumerate(state.ShiftType)
                         )
-                    ).only_enforce_if(enable)
+                    ).OnlyEnforceIf(enable)
     return enable
 
 
@@ -357,9 +357,9 @@ def sunday_different_type_than_friday(model, instance, shifts, spec):
             if day.day_of_week == "V" and j + 2 < len(days):
                 for k, _ in enumerate(state.ShiftType):
                     # Not the same type Friday and Sunday
-                    model.add(
+                    model.Add(
                         shifts[(i, j, k)] + shifts[(i, j + 2, k)] <= 1
-                    ).only_enforce_if(enable)
+                    ).OnlyEnforceIf(enable)
     return enable
 
 
@@ -373,13 +373,13 @@ def block_monday_after_saturday_shift_non_r4(model, instance, shifts, spec):
         if r.rank != "R4":
             for j, day in enumerate(days):
                 if day.day_of_week == "S" and j + 2 < len(days):
-                    model.add(
+                    model.Add(
                         sum(shifts[(i, j, k)] for k, _ in enumerate(state.ShiftType))
                         + sum(
                             shifts[(i, j + 2, k)] for k, _ in enumerate(state.ShiftType)
                         )
                         <= 1
-                    ).only_enforce_if(enable)
+                    ).OnlyEnforceIf(enable)
     return enable
 
 
@@ -392,7 +392,7 @@ def block_monday_after_sat_emergency(model, instance, shifts, spec):
     for i, j in u_positions:
         if days[j].day_of_week == "S" and j < len(days) - 2:
             for k, _ in enumerate(state.ShiftType):
-                model.add(shifts[(i, j + 2, k)] == 0).only_enforce_if(enable)
+                model.Add(shifts[(i, j + 2, k)] == 0).OnlyEnforceIf(enable)
     return enable
 
 
@@ -405,7 +405,7 @@ def non_r4_max_one_sunday(model, instance, shifts, spec):
 
     for i, r in enumerate(residents):
         if r.rank != "R4":
-            model.add(
+            model.Add(
                 sum(
                     shifts[i, j, k]
                     for j, d in enumerate(days)
@@ -413,5 +413,5 @@ def non_r4_max_one_sunday(model, instance, shifts, spec):
                     for k, _ in enumerate(state.ShiftType)
                 )
                 <= 1
-            ).only_enforce_if(enable)
+            ).OnlyEnforceIf(enable)
     return enable

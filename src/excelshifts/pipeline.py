@@ -181,7 +181,7 @@ def assign_instance(
 
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             matrix = _extract_matrix(solver, instance, shifts)
-            obj = solver.ObjectiveValue() if model.Proto().has_objective else None
+            obj = solver.ObjectiveValue() if model.Proto().objective else None
             return AssignmentResult(
                 matrix=matrix,
                 objective=obj,

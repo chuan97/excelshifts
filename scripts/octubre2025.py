@@ -19,12 +19,12 @@ GRID_ROW_START = 4
 GRID_COL_START = 3
 
 # Policy & solver knobs
-POLICY_PATH = "policies/all_off.yaml"  # adjust if needed
+POLICY_PATH = "policies/custom.yaml"  # adjust if needed
 TIME_LIMIT = None  # e.g., 60.0
 SEED = None  # e.g., 123
 WORKERS = 1  # keep 1 for determinism
 RELAX: RelaxMode = "auto"  # "none" or "auto"
-RELAX_LIMIT = 100  # max number of rules to relax when RELAX=="auto"
+RELAX_LIMIT = 10  # max number of rules to relax when RELAX=="auto"
 SAVE = True  # write to a copy: *_solved.xlsx
 
 
