@@ -60,7 +60,8 @@ def load_days(
     weekdays = df.iloc[2, COL_BOUNDS[0] : COL_BOUNDS[1]].dropna().tolist()
 
     days = [
-        state.Day(number, weekday) for number, weekday in zip(day_numbers, weekdays)
+        state.Day(number, weekday.strip())
+        for number, weekday in zip(day_numbers, weekdays)
     ]
 
     return tuple(days)

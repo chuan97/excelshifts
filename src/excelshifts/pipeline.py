@@ -153,7 +153,7 @@ def assign_instance(
     """Solve an assignment for a given Instance, with optional cascading relaxation."""
     base_enabled = load_enabled_map(policy_path)
     current_enabled = dict(base_enabled)
-
+    print(instance.residents)
     relaxed: List[str] = []
     first_core: Optional[List[str]] = None
 
