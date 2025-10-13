@@ -20,7 +20,6 @@ from excelshifts.io.excel import copy_excel_file, save_shifts
 from excelshifts.io.excel import load_instance as load_instance_from_excel
 from excelshifts.model.build import build_model
 from excelshifts.model.objective import maximize_total_coverage
-from excelshifts.policy import load_enabled_map
 
 
 @dataclass(slots=True)
@@ -59,11 +58,11 @@ def _extract_matrix(
     return matrix
 
 
-def _enabled_assumptions(
-    enables: Dict[str, Any], enabled_map: Dict[str, bool]
+def _assumptions(
+    enables: Dict[str, Any], active_ids: Optional[Iterable[str]]
 ) -> List[Any]:
-    # Only include enables for rules that are enabled in the policy
-    return [enables[rid] for rid in enables.keys() if enabled_map.get(rid, True)]
+    active: Optional[set[str]] = set(active_ids) if active_ids is not None else None
+    return [enables[rid] for rid in enables.keys() if active is None or rid in active]
 
 
 def _core_rule_ids(core_lits: List[Any], enables: Dict[str, Any]) -> List[str]:
@@ -100,19 +99,16 @@ def _core_rule_ids(core_lits: List[Any], enables: Dict[str, Any]) -> List[str]:
 def validate_instance(
     *,
     instance: state.Instance,
-    policy_path: Optional[str] = None,
+    policy_path: str,
     rule_ids: Optional[Iterable[str]] = None,
     time_limit: Optional[float] = None,
     seed: Optional[int] = None,
     num_search_workers: int = 1,
 ) -> ValidationResult:
     """Build and solve with assumptions to obtain an UNSAT core when infeasible."""
-    enabled_map = load_enabled_map(policy_path)
-
-    model, instance, shifts, enables = build_model(
+    model, shifts, enables = build_model(
         instance=instance,
-        enabled_map=enabled_map,
-        rule_ids=list(rule_ids) if rule_ids is not None else None,
+        policy_path=policy_path,
     )
 
     solver = cp_model.CpSolver()
@@ -122,7 +118,7 @@ def validate_instance(
         solver.parameters.random_seed = int(seed)
     solver.parameters.num_search_workers = int(num_search_workers)
 
-    assumptions = _enabled_assumptions(enables, enabled_map)
+    assumptions = _assumptions(enables, set(rule_ids) if rule_ids is not None else None)
     model.ClearAssumptions()
     model.AddAssumptions(assumptions)
     status = solver.Solve(model)
@@ -142,7 +138,7 @@ def validate_instance(
 def assign_instance(
     *,
     instance: state.Instance,
-    policy_path: Optional[str] = None,
+    policy_path: str,
     rule_ids: Optional[Iterable[str]] = None,
     time_limit: Optional[float] = None,
     seed: Optional[int] = None,
@@ -151,18 +147,18 @@ def assign_instance(
     relax_limit: int = 1,
 ) -> AssignmentResult:
     """Solve an assignment for a given Instance, with optional cascading relaxation."""
-    base_enabled = load_enabled_map(policy_path)
-    current_enabled = dict(base_enabled)
-    print(instance.residents)
+    active_ids: Optional[set[str]] = set(rule_ids) if rule_ids is not None else None
     relaxed: List[str] = []
     first_core: Optional[List[str]] = None
 
     for attempt in range(0, (relax_limit if relax == "auto" else 0) + 1):
-        model, instance, shifts, enables = build_model(
+        model, shifts, enables = build_model(
             instance=instance,
-            enabled_map=current_enabled,
-            rule_ids=list(rule_ids) if rule_ids is not None else None,
+            policy_path=policy_path,
         )
+
+        if active_ids is None:
+            active_ids = set(enables.keys())
 
         maximize_total_coverage(model, instance, shifts)
 
@@ -173,7 +169,7 @@ def assign_instance(
             solver.parameters.random_seed = int(seed)
         solver.parameters.num_search_workers = int(num_search_workers)
 
-        assumptions = _enabled_assumptions(enables, current_enabled)
+        assumptions = _assumptions(enables, active_ids)
         model.ClearAssumptions()
         model.AddAssumptions(assumptions)
 
@@ -191,8 +187,7 @@ def assign_instance(
                 relaxed_rules=list(relaxed),
             )
 
-        # infeasible or unknown
-        if relax != "auto" or attempt >= relax_limit:
+        if status != cp_model.INFEASIBLE or relax != "auto" or attempt >= relax_limit:
             return AssignmentResult(
                 matrix=None,
                 objective=None,
@@ -202,21 +197,16 @@ def assign_instance(
                 relaxed_rules=list(relaxed),
             )
 
-        # Try to obtain an UNSAT core and relax one rule
-        # We already solved with assumptions; read the core from this solver
         core_lits = list(solver.SufficientAssumptionsForInfeasibility())
         core_rids = _core_rule_ids(core_lits, enables)
         if first_core is None:
             first_core = core_rids
         # Pick the first enabled rule from the core to relax
-        to_disable = next(
-            (rid for rid in core_rids if current_enabled.get(rid, True)), None
-        )
+        to_disable = next((rid for rid in core_rids if rid in active_ids), None)
         if to_disable is None:
             # Fallback: disable the first enabled rule we built
             to_disable = next(
-                (rid for rid in enables.keys() if current_enabled.get(rid, True)),
-                None,
+                (rid for rid in enables.keys() if rid in active_ids), None
             )
         if to_disable is None:
             # Nothing to relax
@@ -228,7 +218,7 @@ def assign_instance(
                 unsat_core=first_core,
                 relaxed_rules=list(relaxed),
             )
-        current_enabled[to_disable] = False
+        active_ids.remove(to_disable)
         relaxed.append(to_disable)
         # loop and try again
         continue
@@ -254,7 +244,7 @@ def assign_excel(
     n_days: int,
     grid_row_start: int,
     grid_col_start: int,
-    policy_path: Optional[str] = None,
+    policy_path: str,
     rule_ids: Optional[Iterable[str]] = None,
     time_limit: Optional[float] = None,
     seed: Optional[int] = None,

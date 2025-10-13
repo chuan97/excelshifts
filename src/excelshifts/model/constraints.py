@@ -71,6 +71,7 @@ class BaseRule:
         - exclude_ids: iterable of resident indices to exclude
         If no filter is specified, all residents are yielded.
         Raises ValueError if more than one filter is provided.
+        Residents in external rotations are automatically excluded from targets.
         """
         p = self.params or {}
         apply_ranks = set(p.get("apply_ranks") or [])
@@ -94,34 +95,40 @@ class BaseRule:
             )
 
         residents = getattr(instance, "residents")
+        external = set(getattr(instance, "external_rotations", ()))
 
+        # Build a single predicate based on the (optional) active filter
         if apply_ranks:
-            for i, r in enumerate(residents):
-                if getattr(r, "rank") in apply_ranks:
-                    yield i, r
-            return
 
-        if exclude_ranks:
-            for i, r in enumerate(residents):
-                if getattr(r, "rank") not in exclude_ranks:
-                    yield i, r
-            return
+            def ok(i, r):
+                return getattr(r, "rank") in apply_ranks
 
-        if include_ids:
-            for i, r in enumerate(residents):
-                if i in include_ids:
-                    yield i, r
-            return
+        elif exclude_ranks:
 
-        if exclude_ids:
-            for i, r in enumerate(residents):
-                if i not in exclude_ids:
-                    yield i, r
-            return
+            def ok(i, r):
+                return getattr(r, "rank") not in exclude_ranks
 
-        # No filters -> everyone
+        elif include_ids:
+
+            def ok(i, r):
+                return i in include_ids
+
+        elif exclude_ids:
+
+            def ok(i, r):
+                return i not in exclude_ids
+
+        else:
+
+            def ok(i, r):  # no filters => everyone
+                return True
+
+        # Single pass over residents with external-rotation exclusion
         for i, r in enumerate(residents):
-            yield i, r
+            if i in external:
+                continue
+            if ok(i, r):
+                yield i, r
 
 
 # ---------- Rule classes ----------
@@ -660,3 +667,22 @@ def get_rule_class(rule_id: str) -> type[BaseRule]:
     except KeyError as e:
         known = ", ".join(sorted(RULES_BY_ID))
         raise KeyError(f"Unknown rule id '{rule_id}'. Known: {known}") from e
+
+
+def apply_rules(
+    model: Any,
+    instance: Any,
+    shifts: Any,
+    rules: Iterable[Any],
+) -> dict[str, Any]:
+    """Apply instantiated rule objects to the model.
+
+    Each rule must implement `.apply(model, instance, shifts)` and return its
+    enable literal. We do not force `enable == 1`; callers may pass these
+    literals as solver assumptions to obtain UNSAT cores.
+    """
+    enables: dict[str, Any] = {}
+    for rule in rules:
+        enable = rule.apply(model, instance, shifts)
+        enables[rule.rule_id] = enable
+    return enables
