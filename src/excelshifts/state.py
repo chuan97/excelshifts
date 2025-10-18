@@ -45,8 +45,8 @@ class Resident:
     rank: Rank
 
     def __post_init__(self):
-        if self.rank not in ("R1", "R2", "R3", "R4"):
-            raise ValueError("Rank must be one of 'R1', 'R2', 'R3', 'R4'")
+        if self.rank not in ("R1", "R2", "R3", "R4", "RE"):
+            raise ValueError("Rank must be one of 'R1', 'R2', 'R3', 'R4', 'RE'")
 
 
 class ShiftType(Enum):

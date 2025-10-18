@@ -12,7 +12,7 @@ SHEET_NAME = "OCTUBRE 2025"
 
 # Coordinates (0-based)
 RESIDENTS_START = 4
-N_RESIDENTS = 22
+N_RESIDENTS = 23
 DAYS_START = 3
 N_DAYS = 30
 GRID_ROW_START = 4
@@ -21,10 +21,7 @@ GRID_COL_START = 3
 # Policy & solver knobs
 POLICY_PATH = "policies/custom.yaml"  # adjust if needed
 TIME_LIMIT = None  # e.g., 60.0
-SEED = None  # e.g., 123
-WORKERS = 1  # keep 1 for determinism
-RELAX: RelaxMode = "auto"  # "none" or "auto"
-RELAX_LIMIT = 10  # max number of rules to relax when RELAX=="auto"
+
 SAVE = True  # write to a copy: *_solved.xlsx
 
 
@@ -40,23 +37,19 @@ def main() -> int:
         grid_col_start=GRID_COL_START,
         policy_path=POLICY_PATH,
         time_limit=TIME_LIMIT,
-        seed=SEED,
-        num_search_workers=WORKERS,
-        relax=RELAX,
-        relax_limit=RELAX_LIMIT,
         save=SAVE,
     )
 
     print(
-        f"status={res.solver_status} objective={res.objective} time={res.wall_time:.3f}s"
+        f"[Result] status={res.solver_status} objective={res.objective} time={res.wall_time:.3f}s"
     )
-    core = res.unsat_core
-    print(core)
-    if core:
-        print("unsat_core=[" + ", ".join(core) + "]")
-    relaxed = res.relaxed_rules
+
+    relaxed = res.relaxed_rules or []
+
     if relaxed:
-        print("relaxed=[" + ", ".join(relaxed) + "]")
+        print("[Result] Relaxed rules:")
+        for rid in relaxed:
+            print(f"  {rid}")
 
     return 0
 

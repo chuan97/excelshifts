@@ -64,66 +64,98 @@ class BaseRule:
     def targets(self, instance) -> Iterable[tuple[int, Any]]:
         """Yield (index, resident) pairs this rule applies to.
 
-        Only one of the following filters may be specified via params:
-        - apply_ranks: iterable of rank strings to include
+        Allowed filters via params (use **at most two**):
+        - include_ranks: iterable of rank strings to include
         - exclude_ranks: iterable of rank strings to exclude
-        - include_ids: iterable of resident indices to include
-        - exclude_ids: iterable of resident indices to exclude
-        If no filter is specified, all residents are yielded.
-        Raises ValueError if more than one filter is provided.
+        - include_names: iterable of resident names to include
+        - exclude_names: iterable of resident names to exclude
+
+        Valid usages:
+        - Any single filter alone, or none (all residents)
+        - Exactly these two-filter combinations:
+          * include_ranks + exclude_names  (start from ranks, then subtract names)
+          * exclude_ranks + include_names  (exclude ranks, but whitelist names)
+
         Residents in external rotations are automatically excluded from targets.
         """
         p = self.params or {}
-        apply_ranks = set(p.get("apply_ranks") or [])
+        include_ranks = set(p.get("include_ranks") or [])
         exclude_ranks = set(p.get("exclude_ranks") or [])
-        include_ids = set(p.get("include_ids") or [])
-        exclude_ids = set(p.get("exclude_ids") or [])
+        include_names = set(map(str, p.get("include_names") or []))
+        exclude_names = set(map(str, p.get("exclude_names") or []))
 
         active = [
             name
             for name, s in (
-                ("apply_ranks", apply_ranks),
+                ("include_ranks", include_ranks),
                 ("exclude_ranks", exclude_ranks),
-                ("include_ids", include_ids),
-                ("exclude_ids", exclude_ids),
+                ("include_names", include_names),
+                ("exclude_names", exclude_names),
             )
             if s
         ]
-        if len(active) > 1:
+
+        if len(active) > 2:
             raise ValueError(
-                f"Rule {self.rule_id}: specify only one of apply_ranks, exclude_ranks, include_ids, exclude_ids. Got {active}"
+                f"Rule {self.rule_id}: at most two filters allowed. Got {active}"
+            )
+        if len(active) == 2 and set(active) not in (
+            {"include_ranks", "exclude_names"},
+            {"exclude_ranks", "include_names"},
+        ):
+            raise ValueError(
+                f"Rule {self.rule_id}: invalid filter combination {active}. "
+                "Allowed pairs: include_ranks+exclude_names, exclude_ranks+include_names."
             )
 
         residents = getattr(instance, "residents")
         external = set(getattr(instance, "external_rotations", ()))
 
-        # Build a single predicate based on the (optional) active filter
-        if apply_ranks:
+        # Build predicate per the active filters
+        if not active:
 
             def ok(i, r):
-                return getattr(r, "rank") in apply_ranks
-
-        elif exclude_ranks:
-
-            def ok(i, r):
-                return getattr(r, "rank") not in exclude_ranks
-
-        elif include_ids:
-
-            def ok(i, r):
-                return i in include_ids
-
-        elif exclude_ids:
-
-            def ok(i, r):
-                return i not in exclude_ids
-
-        else:
-
-            def ok(i, r):  # no filters => everyone
                 return True
 
-        # Single pass over residents with external-rotation exclusion
+        elif active == ["include_ranks"] or active == ["exclude_ranks"]:
+            if include_ranks:
+
+                def ok(i, r):
+                    return getattr(r, "rank") in include_ranks
+
+            else:
+
+                def ok(i, r):
+                    return getattr(r, "rank") not in exclude_ranks
+
+        elif active == ["include_names"] or active == ["exclude_names"]:
+            if include_names:
+
+                def ok(i, r):
+                    return getattr(r, "name", None) in include_names
+
+            else:
+
+                def ok(i, r):
+                    return getattr(r, "name", None) not in exclude_names
+
+        elif set(active) == {"include_ranks", "exclude_names"}:
+
+            def ok(i, r):
+                return (
+                    getattr(r, "rank") in include_ranks
+                    and getattr(r, "name", None) not in exclude_names
+                )
+
+        else:  # set(active) == {"exclude_ranks", "include_names"}
+
+            def ok(i, r):
+                # Allowlisted names are included even if their rank is excluded
+                return (getattr(r, "rank") not in exclude_ranks) or (
+                    getattr(r, "name", None) in include_names
+                )
+
+        # Yield after excluding external rotations
         for i, r in enumerate(residents):
             if i in external:
                 continue
@@ -131,7 +163,7 @@ class BaseRule:
                 yield i, r
 
 
-# ---------- Rule classes ----------
+# ---------- Physical constraints ----------
 
 
 class OneShiftPerDay(BaseRule):
@@ -287,6 +319,54 @@ class CoverGorTEachDay(BaseRule):
             ]
             if lits:
                 model.Add(sum(lits) >= 1).OnlyEnforceIf(enable)
+        return enable
+
+
+class SeniorGorTRequiresOtherCoverage(BaseRule):
+    """
+    If a resident whose rank is in `params['ranks']` is assigned G or T
+    on day j, require that some other resident covers the complementary T or G on day j.
+    """
+
+    ID = "senior_G_or_T_requires_other_coverage"
+    PRIORITY = 1
+
+    def apply(self, model, instance, shifts):
+        enable = self.new_enable(model)
+        residents = instance.residents
+        days = instance.days
+
+        k_G = state.ShiftType.G.value
+        k_T = state.ShiftType.T.value
+
+        ranks_param = self.params.get("ranks")
+        if not isinstance(ranks_param, (list, tuple)) or not ranks_param:
+            raise ValueError(
+                "senior_G_or_T_requires_other_coverage requires param 'ranks' as a non-empty list of rank strings"
+            )
+        senior_ranks = {str(x) for x in ranks_param}
+
+        for i, r in enumerate(residents):
+            if getattr(r, "rank", None) in senior_ranks:
+                for j, _ in enumerate(days):
+                    # If i does G on day j, someone else must do T on day j
+                    lits_T_others = [
+                        shifts[(h, j, k_T)] for h, _ in enumerate(residents) if h != i
+                    ]
+                    if lits_T_others:
+                        model.Add(sum(lits_T_others) >= 1).OnlyEnforceIf(
+                            [enable, shifts[(i, j, k_G)]]
+                        )
+
+                    # If i does T on day j, someone else must do G on day j
+                    lits_G_others = [
+                        shifts[(h, j, k_G)] for h, _ in enumerate(residents) if h != i
+                    ]
+                    if lits_G_others:
+                        model.Add(sum(lits_G_others) >= 1).OnlyEnforceIf(
+                            [enable, shifts[(i, j, k_T)]]
+                        )
+
         return enable
 
 
@@ -524,7 +604,7 @@ class MaxTwoPerTypeForTargets(BaseRule):
 
 class AtLeastOneWeekendForTargets(BaseRule):
     ID = "at_least_one_weekend_for_targets"
-    PRIORITY = 3
+    PRIORITY = 1
 
     def apply(self, model, instance, shifts):
         enable = self.new_enable(model)
@@ -604,7 +684,7 @@ class BlockMondayAfterSaturdayShiftTargets(BaseRule):
 
 class BlockMondayAfterSatEmergency(BaseRule):
     ID = "block_monday_after_sat_emergency"
-    PRIORITY = 3
+    PRIORITY = 4
 
     def apply(self, model, instance, shifts):
         enable = self.new_enable(model)
@@ -618,24 +698,123 @@ class BlockMondayAfterSatEmergency(BaseRule):
         return enable
 
 
-class MaxOneSundayForTargets(BaseRule):
-    ID = "max_one_sunday_for_targets"
+class MaxWeekendShiftsForTargets(BaseRule):
+    ID = "max_weekend_shifts_for_targets"
+    PRIORITY = 3
+
+    def apply(self, model, instance, shifts):
+        enable = self.new_enable(model)
+        days = instance.days
+
+        # required param: maximum number of weekend shifts per targeted resident
+        try:
+            max_weekend = int(self.params["max"])
+        except Exception as e:
+            raise ValueError(
+                "max_weekend_shifts_for_targets requires integer param 'max'"
+            ) from e
+        if max_weekend < 0:
+            raise ValueError("'max' must be a non-negative integer")
+
+        weekend_js = [j for j, d in enumerate(days) if d.day_of_week in ["S", "D"]]
+
+        # Constraints per targeted resident
+        for i, _ in self.targets(instance):
+            lits = [
+                shifts[(i, j, k)]
+                for j in weekend_js
+                for k, _ in enumerate(state.ShiftType)
+            ]
+
+            # Count emergency U / UT that fall on weekends for resident i
+            u_extra = sum(
+                1 for ri, dj in instance.u_positions if ri == i and dj in weekend_js
+            )
+            ut_extra = sum(
+                1 for ri, dj in instance.ut_positions if ri == i and dj in weekend_js
+            )
+
+            if lits or u_extra or ut_extra:
+                model.Add(sum(lits) + u_extra + ut_extra <= max_weekend).OnlyEnforceIf(
+                    enable
+                )
+
+        return enable
+
+
+# New rule: WeekendBalanceForTargets
+class WeekendBalanceForTargets(BaseRule):
+    ID = "weekend_balance_for_targets"
     PRIORITY = 3
 
     def apply(self, model, instance, shifts):
         enable = self.new_enable(model)
         days = instance.days
         end_of_month = instance.end_of_month
+
+        # Collect Saturday and Sunday indices in the planning horizon, strictly before end_of_month
+        sat_js = [
+            j for j, d in enumerate(days) if j < end_of_month and d.day_of_week == "S"
+        ]
+        sun_js = [
+            j for j, d in enumerate(days) if j < end_of_month and d.day_of_week == "D"
+        ]
+
         for i, _ in self.targets(instance):
-            model.Add(
-                sum(
-                    shifts[i, j, k]
-                    for j, d in enumerate(days)
-                    if d.day_of_week == "D" and j < end_of_month
+            sat_lits = [
+                shifts[(i, j, k)] for j in sat_js for k, _ in enumerate(state.ShiftType)
+            ]
+            sun_lits = [
+                shifts[(i, j, k)] for j in sun_js for k, _ in enumerate(state.ShiftType)
+            ]
+
+            # |#Sat - #Sun| <= 1  <=>  (#Sat - #Sun <= 1) and (#Sun - #Sat <= 1)
+            model.Add(sum(sat_lits) - sum(sun_lits) <= 1).OnlyEnforceIf(enable)
+            model.Add(sum(sun_lits) - sum(sat_lits) <= 1).OnlyEnforceIf(enable)
+
+        return enable
+
+
+# ------------- Quality of life constraints ------------------
+
+
+class NoMShiftsInNDays(BaseRule):
+    ID = "no_m_shifts_in_n_days"
+    PRIORITY = 0
+
+    def apply(self, model, instance, shifts):
+        enable = self.new_enable(model)
+        days = instance.days
+
+        # Enforce: in any `n_days` window, total counted shifts (incl. R) + U-days < `m_shifts`
+        try:
+            m_shifts = self.params["m_shifts"]
+            n_days = self.params["n_days"]
+        except Exception as e:
+            raise ValueError(
+                "no_m_shifts_in_n_days requires integer params 'm_shifts' and 'n_days'"
+            ) from e
+        if m_shifts <= 0 or n_days <= 0:
+            raise ValueError("'m_shifts' and 'n_days' must be positive integers")
+        if n_days > len(days):
+            raise ValueError("'n_days' is larger the number of days in the month")
+
+        for i, _ in self.targets(instance):
+            for j in range(0, max(0, len(days) - n_days + 1)):
+                lits = [
+                    shifts[(i, d, k)]
+                    for d in range(j, j + n_days)
                     for k, _ in enumerate(state.ShiftType)
+                ]
+
+                u_extra = sum(
+                    1
+                    for ri, dj in instance.u_positions
+                    if ri == i and j <= dj < j + n_days
                 )
-                <= 1
-            ).OnlyEnforceIf(enable)
+
+                model.Add(sum(lits) + u_extra < m_shifts).OnlyEnforceIf(enable)
+
         return enable
 
 

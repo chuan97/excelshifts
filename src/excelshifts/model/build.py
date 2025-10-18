@@ -12,8 +12,7 @@ from typing import Any, Dict, Tuple
 from ortools.sat.python import cp_model
 
 import excelshifts.state as state
-from excelshifts.io.policy import load_rules
-from excelshifts.model.constraints import apply_rules
+from excelshifts.model.constraints import BaseRule, apply_rules
 from excelshifts.model.variables import create_shifts
 
 essential_return = Tuple[
@@ -24,7 +23,7 @@ essential_return = Tuple[
 def build_model(
     *,
     instance: state.Instance,
-    policy_path: str,
+    rules: list[BaseRule],
 ) -> essential_return:
     """Build the CP-SAT model and apply rule builders.
 
@@ -46,7 +45,7 @@ def build_model(
     """
     model = cp_model.CpModel()
     shifts = create_shifts(model, instance)
-    rules = load_rules(policy_path)
+
     enables = apply_rules(
         model=model,
         instance=instance,

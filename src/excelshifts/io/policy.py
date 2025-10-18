@@ -11,7 +11,6 @@ Assumptions (strict):
 from __future__ import annotations
 
 import warnings
-from typing import List
 
 from yaml import safe_load
 
@@ -22,7 +21,7 @@ class PolicyWarning(UserWarning):
     pass
 
 
-def load_rules(path: str) -> List[BaseRule]:
+def load_rules(path: str) -> list[BaseRule]:
     with open(path, "r", encoding="utf-8") as stream:
         parsed = safe_load(stream)
 
@@ -34,7 +33,7 @@ def load_rules(path: str) -> List[BaseRule]:
             "'rules' must be a list of mappings with keys 'id' and optional 'init'."
         )
 
-    instances: List[BaseRule] = []
+    instances: list[BaseRule] = []
     for idx, item in enumerate(rules_list):
         if not isinstance(item, dict) or "id" not in item:
             raise ValueError(
@@ -63,5 +62,19 @@ def load_rules(path: str) -> List[BaseRule]:
         if not isinstance(rule, BaseRule):
             raise TypeError(f"Constructed object is not a BaseRule: {rule!r}")
         instances.append(rule)
+
+    # Print rules grouped by priority (ascending)
+    groups: dict[int, list[str]] = {}
+    for rule in instances:
+        prio = rule.eff_priority
+        rid = rule.rule_id
+        groups.setdefault(int(prio), []).append(str(rid))
+
+    if groups:
+        print("[Policy] Rules by priority:")
+        for prio in sorted(groups):
+            print(f"  Priority {prio}:")
+            for rid in groups[prio]:
+                print(f"    {rid}")
 
     return instances

@@ -10,21 +10,22 @@ Validation/diagnostics (unsat cores, cascading relax) will be added later.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Literal, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
-from ortools.sat.cp_model_pb2 import CpSolverStatus
 from ortools.sat.python import cp_model
 
 import excelshifts.state as state
 from excelshifts.io.excel import copy_excel_file, save_shifts
 from excelshifts.io.excel import load_instance as load_instance_from_excel
+from excelshifts.io.policy import load_rules
 from excelshifts.model.build import build_model
+from excelshifts.model.constraints import BaseRule
 from excelshifts.model.objective import maximize_total_coverage
 
 
 @dataclass(slots=True)
 class ValidationResult:
-    solver_status: CpSolverStatus
+    solver_status: str
     unsat_core: Optional[List[str]]
     wall_time: float
 
@@ -33,7 +34,7 @@ class ValidationResult:
 class AssignmentResult:
     matrix: Optional[List[List[str]]]
     objective: Optional[float]
-    solver_status: Optional[CpSolverStatus]
+    solver_status: str
     wall_time: float
     unsat_core: Optional[List[str]] = None
     relaxed_rules: List[str] = field(default_factory=list)
@@ -99,17 +100,13 @@ def _core_rule_ids(core_lits: List[Any], enables: Dict[str, Any]) -> List[str]:
 def validate_instance(
     *,
     instance: state.Instance,
-    policy_path: str,
-    rule_ids: Optional[Iterable[str]] = None,
+    rules: list[BaseRule],
     time_limit: Optional[float] = None,
     seed: Optional[int] = None,
     num_search_workers: int = 1,
 ) -> ValidationResult:
     """Build and solve with assumptions to obtain an UNSAT core when infeasible."""
-    model, shifts, enables = build_model(
-        instance=instance,
-        policy_path=policy_path,
-    )
+    model, shifts, enables = build_model(instance=instance, rules=rules)
 
     solver = cp_model.CpSolver()
     if time_limit is not None:
@@ -118,7 +115,7 @@ def validate_instance(
         solver.parameters.random_seed = int(seed)
     solver.parameters.num_search_workers = int(num_search_workers)
 
-    assumptions = _assumptions(enables, set(rule_ids) if rule_ids is not None else None)
+    assumptions = _assumptions(enables, None)
     model.ClearAssumptions()
     model.AddAssumptions(assumptions)
     status = solver.Solve(model)
@@ -129,7 +126,7 @@ def validate_instance(
         core = _core_rule_ids(core_lits, enables)
 
     return ValidationResult(
-        solver_status=status,
+        solver_status=solver.status_name(status),
         unsat_core=core,
         wall_time=solver.WallTime(),
     )
@@ -138,23 +135,29 @@ def validate_instance(
 def assign_instance(
     *,
     instance: state.Instance,
-    policy_path: str,
-    rule_ids: Optional[Iterable[str]] = None,
+    rules: list[BaseRule],
     time_limit: Optional[float] = None,
-    seed: Optional[int] = None,
-    num_search_workers: int = 1,
-    relax: Literal["none", "auto"] = "none",
-    relax_limit: int = 1,
 ) -> AssignmentResult:
-    """Solve an assignment for a given Instance, with optional cascading relaxation."""
-    active_ids: Optional[set[str]] = set(rule_ids) if rule_ids is not None else None
+    """Solve an assignment for a given Instance, always relaxing constraints as needed."""
+    active_ids: Optional[set[str]] = None
+
+    # Map rule_id -> PRIORITY from provided rule instances
+    def _rid(r: BaseRule) -> str:
+        return (
+            getattr(r, "rule_id", None)
+            or getattr(r, "ID", None)
+            or r.__class__.__name__
+        )
+
+    rule_priority: dict[str, int] = {_rid(r): int(r.eff_priority) for r in rules}
     relaxed: List[str] = []
     first_core: Optional[List[str]] = None
 
-    for attempt in range(0, (relax_limit if relax == "auto" else 0) + 1):
+    attempt = 0
+    while True:
         model, shifts, enables = build_model(
             instance=instance,
-            policy_path=policy_path,
+            rules=rules,
         )
 
         if active_ids is None:
@@ -165,15 +168,13 @@ def assign_instance(
         solver = cp_model.CpSolver()
         if time_limit is not None:
             solver.parameters.max_time_in_seconds = float(time_limit)
-        if seed is not None:
-            solver.parameters.random_seed = int(seed)
-        solver.parameters.num_search_workers = int(num_search_workers)
 
         assumptions = _assumptions(enables, active_ids)
         model.ClearAssumptions()
         model.AddAssumptions(assumptions)
 
         status = solver.Solve(model)
+        print(f"[Assignment] Attempt {attempt}, result: {solver.status_name(status)}")
 
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             matrix = _extract_matrix(solver, instance, shifts)
@@ -181,57 +182,59 @@ def assign_instance(
             return AssignmentResult(
                 matrix=matrix,
                 objective=obj,
-                solver_status=status,
+                solver_status=solver.status_name(status),
                 wall_time=solver.WallTime(),
                 unsat_core=first_core,
                 relaxed_rules=list(relaxed),
             )
 
-        if status != cp_model.INFEASIBLE or relax != "auto" or attempt >= relax_limit:
+        if status != cp_model.INFEASIBLE:
             return AssignmentResult(
                 matrix=None,
                 objective=None,
-                solver_status=status,
+                solver_status=solver.status_name(status),
                 wall_time=solver.WallTime(),
                 unsat_core=first_core,
                 relaxed_rules=list(relaxed),
             )
 
-        core_lits = list(solver.SufficientAssumptionsForInfeasibility())
+        core_lits_idx = list(solver.SufficientAssumptionsForInfeasibility())
+        core_lits = [model.get_bool_var_from_proto_index(idx) for idx in core_lits_idx]
         core_rids = _core_rule_ids(core_lits, enables)
+
         if first_core is None:
             first_core = core_rids
-        # Pick the first enabled rule from the core to relax
-        to_disable = next((rid for rid in core_rids if rid in active_ids), None)
-        if to_disable is None:
-            # Fallback: disable the first enabled rule we built
-            to_disable = next(
-                (rid for rid in enables.keys() if rid in active_ids), None
-            )
-        if to_disable is None:
-            # Nothing to relax
+        # Priority-aware relaxation: disable highest-priority enabled rule from the core
+        enabled_core = [rid for rid in core_rids if rid in active_ids]
+        if not enabled_core:
             return AssignmentResult(
                 matrix=None,
                 objective=None,
-                solver_status=status,
+                solver_status=solver.status_name(status),
                 wall_time=solver.WallTime(),
                 unsat_core=first_core,
                 relaxed_rules=list(relaxed),
             )
+        max_prio = max(rule_priority.get(rid, 0) for rid in enabled_core)
+        candidates = [
+            rid
+            for rid in core_rids
+            if rid in enabled_core and rule_priority.get(rid, 0) == max_prio
+        ]
+        to_disable = candidates[0] if candidates else None
+        if to_disable is None:
+            return AssignmentResult(
+                matrix=None,
+                objective=None,
+                solver_status=solver.status_name(status),
+                wall_time=solver.WallTime(),
+                unsat_core=first_core,
+                relaxed_rules=list(relaxed),
+            )
+
         active_ids.remove(to_disable)
         relaxed.append(to_disable)
-        # loop and try again
-        continue
-
-    # Should not reach here
-    return AssignmentResult(
-        matrix=None,
-        objective=None,
-        solver_status=None,
-        wall_time=0.0,
-        unsat_core=first_core,
-        relaxed_rules=list(relaxed),
-    )
+        attempt += 1
 
 
 def assign_excel(
@@ -245,13 +248,8 @@ def assign_excel(
     grid_row_start: int,
     grid_col_start: int,
     policy_path: str,
-    rule_ids: Optional[Iterable[str]] = None,
     time_limit: Optional[float] = None,
-    seed: Optional[int] = None,
-    num_search_workers: int = 1,
     save: bool = False,
-    relax: Literal["none", "auto"] = "none",
-    relax_limit: int = 1,
 ) -> AssignmentResult:
     """Load inputs from Excel, solve, and optionally write the result back to the sheet."""
     inst = load_instance_from_excel(
@@ -265,15 +263,12 @@ def assign_excel(
         grid_col_start=grid_col_start,
     )
 
+    rules = load_rules(policy_path)
+
     result = assign_instance(
         instance=inst,
-        policy_path=policy_path,
-        rule_ids=rule_ids,
+        rules=rules,
         time_limit=time_limit,
-        seed=seed,
-        num_search_workers=num_search_workers,
-        relax=relax,
-        relax_limit=relax_limit,
     )
 
     if save and result.matrix is not None:
