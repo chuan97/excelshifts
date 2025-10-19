@@ -1,7 +1,7 @@
 """Assignment pipeline.
 
 This module exposes two entry points:
-  - assign_instance(instance, ...): build + solve from an in-memory Instance
+  - assign(instance, ...): build + solve from an in-memory Instance
   - assign_excel(input_path, sheet_name, ..., save=False): load from Excel and optionally save results back
 
 Validation/diagnostics (unsat cores, cascading relax) will be added later.
@@ -97,7 +97,7 @@ def _core_rule_ids(core_lits: List[Any], enables: Dict[str, Any]) -> List[str]:
     return out
 
 
-def validate_instance(
+def validate(
     *,
     instance: state.Instance,
     rules: list[BaseRule],
@@ -132,7 +132,7 @@ def validate_instance(
     )
 
 
-def assign_instance(
+def assign(
     *,
     instance: state.Instance,
     rules: list[BaseRule],
@@ -177,15 +177,83 @@ def assign_instance(
         print(f"[Assignment] Attempt {attempt}, result: {solver.status_name(status)}")
 
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            matrix = _extract_matrix(solver, instance, shifts)
-            obj = solver.ObjectiveValue() if model.Proto().objective else None
+            # --- Trim pass: try to re-enable disabled rules while keeping feasibility ---
+            if relaxed:
+                # Sort relaxed rules by ascending priority (more important first),
+                # preserving original order within the same priority tier.
+                relaxed_sorted = sorted(
+                    relaxed,
+                    key=lambda rid: (rule_priority.get(rid, 0), relaxed.index(rid)),
+                )
+
+                for rid in relaxed_sorted:
+                    # Tentatively re-enable and test feasibility
+                    active_ids.add(rid)
+
+                    model_t, shifts_t, enables_t = build_model(
+                        instance=instance,
+                        rules=rules,
+                    )
+                    maximize_total_coverage(model_t, instance, shifts_t)
+
+                    solver_t = cp_model.CpSolver()
+                    if time_limit is not None:
+                        solver_t.parameters.max_time_in_seconds = float(time_limit)
+
+                    assumptions_t = _assumptions(enables_t, active_ids)
+                    model_t.ClearAssumptions()
+                    model_t.AddAssumptions(assumptions_t)
+
+                    status_t = solver_t.Solve(model_t)
+                    print(
+                        f"[Assignment] Attempting reenable, result: {solver.status_name(status)}"
+                    )
+                    if status_t not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                        # Not feasible -> keep it disabled
+                        active_ids.remove(rid)
+                        continue
+                    # Feasible -> keep enabled and continue trying to recover more rules
+
+            # Final solve with trimmed active_ids to obtain matrix/objective and final relaxed set
+            model_f, shifts_f, enables_f = build_model(
+                instance=instance,
+                rules=rules,
+            )
+            maximize_total_coverage(model_f, instance, shifts_f)
+
+            solver_f = cp_model.CpSolver()
+            if time_limit is not None:
+                solver_f.parameters.max_time_in_seconds = float(time_limit)
+
+            assumptions_f = _assumptions(enables_f, active_ids)
+            model_f.ClearAssumptions()
+            model_f.AddAssumptions(assumptions_f)
+            status_f = solver_f.Solve(model_f)
+
+            if status_f not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                # Should not happen; fallback to original feasible result without trimming
+                matrix = _extract_matrix(solver, instance, shifts)
+                obj = solver.ObjectiveValue() if model.Proto().objective else None
+                return AssignmentResult(
+                    matrix=matrix,
+                    objective=obj,
+                    solver_status=solver.status_name(status),
+                    wall_time=solver.WallTime(),
+                    unsat_core=first_core,
+                    relaxed_rules=list(relaxed),
+                )
+
+            # Success: return trimmed result
+            matrix = _extract_matrix(solver_f, instance, shifts_f)
+            obj = solver_f.ObjectiveValue() if model_f.Proto().objective else None
+            final_relaxed = [rid for rid in enables_f.keys() if rid not in active_ids]
             return AssignmentResult(
                 matrix=matrix,
                 objective=obj,
-                solver_status=solver.status_name(status),
-                wall_time=solver.WallTime(),
+                solver_status=solver_f.status_name(status_f),
+                wall_time=solver_f.WallTime(),
                 unsat_core=first_core,
-                relaxed_rules=list(relaxed),
+                relaxed_rules=final_relaxed,
             )
 
         if status != cp_model.INFEASIBLE:
@@ -265,7 +333,7 @@ def assign_excel(
 
     rules = load_rules(policy_path)
 
-    result = assign_instance(
+    result = assign(
         instance=inst,
         rules=rules,
         time_limit=time_limit,
