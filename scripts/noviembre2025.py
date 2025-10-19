@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from excelshifts.pipeline import assign_excel
-
-RelaxMode = Literal["none", "auto"]
 
 # --- Month-specific configuration ---
 INPUT_PATH = "data/Guardias noviembre.xlsx"
@@ -19,7 +15,7 @@ GRID_ROW_START = 4
 GRID_COL_START = 3
 
 # Policy & solver knobs
-POLICY_PATH = "policies/custom.yaml"  # adjust if needed
+POLICY_PATH = "policies/custom_noviembre2025.yaml"  # adjust if needed
 TIME_LIMIT = None  # e.g., 60.0
 
 SAVE = True  # write to a copy: *_solved.xlsx

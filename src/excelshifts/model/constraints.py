@@ -58,6 +58,9 @@ class BaseRule:
     def eff_priority(self) -> int:
         return self.priority if self.priority is not None else self.__class__.PRIORITY
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(priority={self.eff_priority}, rule_id='{self.rule_id}', params={self.params})"
+
     def new_enable(self, model):  # -> BoolVar
         return model.NewBoolVar(f"enable_{self.rule_id}")
 
