@@ -1,0 +1,152 @@
+rules:
+  # ---------- Basic / physical constraints ----------
+  - id: one_shift_per_day
+  - id: restricted_day_off
+  - id: no_R_on_weekends_or_holidays
+  - id: rest_after_any_shift
+  - id: block_around_emergency_u
+  - id: block_around_emergency_ut
+  - id: external_rotation_off
+
+  # ---------- Coverage constraints ----------
+  - id: at_most_one_resident_per_shift_per_day
+  - id: cover_G_or_T_each_day
+  - id: senior_G_or_T_requires_other_coverage
+    init:
+      params:
+        ranks: ["R3", "R4"]
+  - id: min_assignments_per_day
+  - id: not_same_type_uncovered_both_weekend_days
+
+  # ---------- Presets ----------
+  - id: enforce_presets
+  - id: holiday_assigned_must_work
+  - id: only_presets_for_targets
+    init:
+      params:
+        include_ranks: ["R4"]    # R4s only do their presets
+
+  # ---------- Totals per rank (6 minus U and UT pairs) ----------
+  - id: total_number_of_shifts
+    init:
+      params:
+        total: 6
+        include_ranks: ["R1", "R2", "R3"]
+  # - id: total_number_of_shifts
+  #   init:
+  #     id: people_with_many_holidays
+  #     params:
+  #       total: 5
+  #       include_names: []
+  - id: total_number_of_shifts
+    init:
+      id: total_number_of_shifts_re
+      params:
+        total: 4
+        include_ranks: ["RE"]
+
+  # ---------- Distribution constraints ----------
+  - id: targets_do_at_least_of_type
+    init:
+      id: at_least_one_GTM_for_r1_re
+      params:
+        types: ["G", "T", "M"]
+        include_ranks: ["R1", "RE"]
+  - id: targets_do_not_do_type
+    init:
+      id: r1_re_no_R
+      params:
+        types: ["R"]
+        include_ranks: ["R1", "RE"]
+  - id: targets_do_at_least_of_type
+    init:
+      id: at_least_one_RGTM_for_r23
+      params:
+        types: ["R", "G", "T", "M"]
+        include_ranks: ["R2", "R3"]
+  - id: max_two_per_type_for_targets
+    init:
+      id: non_r4_max_two_per_type
+      params:
+        include_ranks: ["R1", "R2", "R3"]
+
+  # ---------- Weekend constraints ----------
+  - id: at_least_one_weekend_for_targets
+    init:
+      id: at_least_one_weekend_non_r4
+      params:
+        exclude_ranks: ["R4"]
+  - id: friday_requires_sunday
+    init:
+      params:
+        include_ranks: ["R1", "R2", "R3", "RE"]
+  - id: sunday_different_type_than_friday
+  - id: block_monday_after_saturday_shift_targets
+    init:
+      id: block_monday_after_saturday_shift_non_r4
+      params:
+        include_ranks: ["R1", "R2", "R3", "RE"]
+  - id: block_monday_after_sat_emergency
+    init:
+      params:
+        include_ranks: ["R1", "R2"]
+  - id: max_weekend_shifts_for_targets
+    init:
+      id: one_weekend_for_r3
+      priority: 2
+      params:
+        max: 1
+        include_ranks: ["R3"]
+  - id: max_weekend_shifts_for_targets
+    init:
+      id: two_weekend_for_r2_r1
+      priority: 0
+      params:
+        max: 2
+        include_ranks: ["R1", "R2"]
+  - id: max_weekend_shifts_for_targets
+    init:
+      id: one_weekend_for_r2
+      priority: 3
+      params:
+        max: 1
+        include_ranks: ["R2"]
+
+  - id: weekend_balance_for_targets
+    init:
+      params:
+        include_ranks: ["R1", "R2", "R3", "RE"]
+  
+  # -------- Quality of life constraints --------
+  - id: no_m_shifts_in_n_days
+    init:
+      id: no_cuatripletes
+      priority: 0
+      params:
+        include_ranks: ["R1", "R2", "R3", "RE"]
+        m_shifts: 4
+        n_days: 7
+  - id: no_m_shifts_in_n_days
+    init:
+      id: no_tripletes_r3
+      priority: 0
+      params:
+        include_ranks: ["R3"]
+        m_shifts: 3
+        n_days: 5
+  - id: no_m_shifts_in_n_days
+    init:
+      id: no_tripletes_r2_re
+      priority: 2
+      params:
+        include_ranks: ["R2", "RE"]
+        m_shifts: 3
+        n_days: 5
+  - id: no_m_shifts_in_n_days
+    init:
+      id: no_tripletes_r1
+      priority: 4
+      params:
+        include_ranks: ["R1"]
+        m_shifts: 3
+        n_days: 5
