@@ -517,7 +517,7 @@ class TotalNumberOfShifts(BaseRule):
 
 class TargetsDoAtLeastOfType(BaseRule):
     ID = "targets_do_at_least_of_type"
-    PRIORITY = 3
+    PRIORITY = 2
 
     def apply(self, model, instance, shifts):
         enable = self.new_enable(model)
@@ -729,18 +729,8 @@ class MaxWeekendShiftsForTargets(BaseRule):
                 for k, _ in enumerate(state.ShiftType)
             ]
 
-            # Count emergency U / UT that fall on weekends for resident i
-            u_extra = sum(
-                1 for ri, dj in instance.u_positions if ri == i and dj in weekend_js
-            )
-            ut_extra = sum(
-                1 for ri, dj in instance.ut_positions if ri == i and dj in weekend_js
-            )
-
-            if lits or u_extra or ut_extra:
-                model.Add(sum(lits) + u_extra + ut_extra <= max_weekend).OnlyEnforceIf(
-                    enable
-                )
+            if lits:
+                model.Add(sum(lits) <= max_weekend).OnlyEnforceIf(enable)
 
         return enable
 
