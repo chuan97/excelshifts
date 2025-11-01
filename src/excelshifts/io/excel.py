@@ -315,6 +315,7 @@ def load_instance(
     n_days: int,
     grid_row_start: int,
     grid_col_start: int,
+    p_days: list[int],
 ) -> state.Instance:
     """Load a complete Instance from a single Excel sheet.
 
@@ -379,6 +380,7 @@ def load_instance(
         u_positions=u_positions,
         ut_positions=ut_positions,
         p_positions=p_positions,
+        extra_p_days=tuple(p_days),
         external_rotations=external_rotations,
         presets=presets,
     )

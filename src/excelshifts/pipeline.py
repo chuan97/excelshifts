@@ -375,6 +375,7 @@ def assign_excel(
     n_days: int,
     grid_row_start: int,
     grid_col_start: int,
+    p_days: list[int],
     policy_path: str,
     time_limit: Optional[float] = None,
     save: bool = False,
@@ -389,6 +390,7 @@ def assign_excel(
         n_days=n_days,
         grid_row_start=grid_row_start,
         grid_col_start=grid_col_start,
+        p_days=p_days,
     )
 
     rules = load_rules(policy_path)
@@ -422,6 +424,7 @@ def validate_excel(
     n_days: int,
     grid_row_start: int,
     grid_col_start: int,
+    p_days: list[int],
     policy_path: str,
     time_limit: Optional[float] = None,
 ) -> ValidationResult:
@@ -438,6 +441,7 @@ def validate_excel(
         n_days=n_days,
         grid_row_start=grid_row_start,
         grid_col_start=grid_col_start,
+        p_days=p_days,
     )
 
     rules = load_rules(policy_path)

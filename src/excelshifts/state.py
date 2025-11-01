@@ -1,5 +1,7 @@
 """Module with dataclasses to hold the state for the main entities of the program"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
@@ -81,6 +83,7 @@ class Instance:
     u_positions: tuple[tuple[int, int], ...]
     ut_positions: tuple[tuple[int, int], ...]
     p_positions: tuple[tuple[int, int], ...]
+    extra_p_days: tuple[int, ...]
     external_rotations: frozenset[int]
     presets: tuple[tuple[int, int, int], ...]
 
@@ -96,6 +99,9 @@ class Instance:
                 break
         object.__setattr__(self, "end_of_month", eom)
 
-        # Compute holiday indices from p_positions
-        pset = frozenset(day_idx for (_, day_idx) in self.p_positions)
-        object.__setattr__(self, "p_days", pset)
+        # Compute holiday indices from p_positions and extra_p_days
+        pset = set(day_idx for (_, day_idx) in self.p_positions)
+        for day_idx, day in enumerate(self.days):
+            if day.number in self.extra_p_days:
+                pset.add(day_idx)
+        object.__setattr__(self, "p_days", frozenset(pset))
