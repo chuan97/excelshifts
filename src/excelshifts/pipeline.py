@@ -24,13 +24,6 @@ from excelshifts.model.objective import maximize_total_coverage
 
 
 @dataclass(slots=True)
-class ValidationResult:
-    solver_status: str
-    unsat_core: Optional[List[str]]
-    wall_time: float
-
-
-@dataclass(slots=True)
 class AssignmentResult:
     matrix: Optional[List[List[str]]]
     objective: Optional[float]
@@ -95,101 +88,6 @@ def _core_rule_ids(core_lits: List[Any], enables: Dict[str, Any]) -> List[str]:
             seen.add(r)
             out.append(r)
     return out
-
-
-def _fix_presets(
-    model: cp_model.CpModel,
-    shifts: Dict[tuple[int, int, int], Any],
-    presets: tuple[tuple[int, int, int]],
-) -> None:
-    """Force exact assignments for preset triplets (i, j, k).
-
-    For each (i, j, k*), set shifts[(i, j, k*)] == 1 and all other k != k* at (i, j) to 0.
-    """
-    for i, j, k_star in presets:
-        # 1) the chosen one is True
-        model.Add(shifts[(i, j, k_star)] == 1)
-        # 2) all others are False
-        for k, _ in enumerate(state.ShiftType):
-            if k != k_star:
-                model.Add(shifts[(i, j, k)] == 0)
-
-
-def _shrink_core_to_mus(
-    *,
-    model: cp_model.CpModel,
-    enables: Dict[str, Any],
-    core_ids: List[str],
-    time_limit: Optional[float],
-) -> List[str]:
-    # Greedy deletion-based MUS: try removing each assumption and keep it removed if infeasibility persists
-
-    # Work on a copy of core_ids to preserve given order
-    mus = list(core_ids)
-
-    for rid in core_ids:
-        if rid not in mus:
-            continue
-        # Temporarily drop this assumption
-        trial = [enables[x] for x in mus if x != rid]
-
-        solver = cp_model.CpSolver()
-        if time_limit is not None:
-            solver.parameters.max_time_in_seconds = float(time_limit)
-        model.ClearAssumptions()
-        model.AddAssumptions(trial)
-        status = solver.Solve(model)
-        if status == cp_model.INFEASIBLE:
-            # still UNSAT without rid => rid not necessary
-            mus.remove(rid)
-        # else: necessary => keep rid in mus
-
-    return mus
-
-
-def validate(
-    *,
-    instance: state.Instance,
-    rules: list[BaseRule],
-    time_limit: Optional[float] = None,
-) -> ValidationResult:
-    """Build and solve with assumptions to obtain an UNSAT core when infeasible."""
-    model, shifts, enables = build_model(instance=instance, rules=rules)
-    print(instance.presets)
-    print(instance.residents)
-    print(rules)
-    # Apply presets contained in the instance (single source of truth)
-    presets = getattr(instance, "presets", None)
-    if presets is not None:
-        _fix_presets(model, shifts, presets)
-
-    solver = cp_model.CpSolver()
-    if time_limit is not None:
-        solver.parameters.max_time_in_seconds = float(time_limit)
-
-    assumptions = _assumptions(enables, None)
-    model.ClearAssumptions()
-    model.AddAssumptions(assumptions)
-    status = solver.Solve(model)
-    print(solver.status_name(status))
-    core: Optional[list[str]] = None
-    if status == cp_model.INFEASIBLE:
-        core_lits_idx = list(solver.SufficientAssumptionsForInfeasibility())
-        core_lits = [model.get_bool_var_from_proto_index(idx) for idx in core_lits_idx]
-        core_rids = _core_rule_ids(core_lits, enables)
-        # Greedily shrink to a subset-minimal core (MUS)
-        core = _shrink_core_to_mus(
-            model=model,
-            enables=enables,
-            core_ids=core_rids,
-            time_limit=time_limit,
-        )
-
-    return ValidationResult(
-        solver_status=solver.status_name(status),
-        unsat_core=core,
-        wall_time=solver.WallTime(),
-    )
 
 
 def assign(
@@ -412,42 +310,3 @@ def assign_excel(
         )
 
     return result
-
-
-def validate_excel(
-    *,
-    input_path: str,
-    sheet_name: str,
-    residents_start: int,
-    n_residents: int,
-    days_start: int,
-    n_days: int,
-    grid_row_start: int,
-    grid_col_start: int,
-    p_days: list[int],
-    policy_path: str,
-    time_limit: Optional[float] = None,
-) -> ValidationResult:
-    """Load inputs from Excel and validate against the policy rules.
-
-    Presets (partial or full assignments) must be embedded in the Instance by the Excel loader.
-    """
-    inst = load_instance_from_excel(
-        input_path,
-        sheet_name,
-        residents_start=residents_start,
-        n_residents=n_residents,
-        days_start=days_start,
-        n_days=n_days,
-        grid_row_start=grid_row_start,
-        grid_col_start=grid_col_start,
-        p_days=p_days,
-    )
-
-    rules = load_rules(policy_path)
-
-    return validate(
-        instance=inst,
-        rules=rules,
-        time_limit=time_limit,
-    )
