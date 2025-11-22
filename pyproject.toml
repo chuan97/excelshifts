@@ -10,6 +10,9 @@ dependencies = [
     "pandas",
     "openpyxl",
     "pyyaml",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
 ]
 
 [tool.hatch.envs.default]
@@ -25,4 +28,5 @@ dependencies = [
     "types-openpyxl",
 ]
 
-
+[tool.hatch.envs.default.scripts]
+api = "uvicorn excelshifts.web.api:app --reload"
