@@ -6,3 +6,4 @@ src/*.egg-info/
 .mypy_cache/
 policies/*
 !policies/default.yaml
+.ruff_cache
